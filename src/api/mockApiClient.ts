@@ -43,12 +43,17 @@ import type {
   DocumentType,
   PaymentMethod,
   RefType,
+  ProductCategory,
 } from '@/types';
 
 // Simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class MockApiClient implements ApiClient {
+  
+  updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
+    throw new Error('Method not implemented.');
+  }
   private currentUserId: string | null = null;
 
   // ============ Auth ============
@@ -318,6 +323,41 @@ export class MockApiClient implements ApiClient {
     );
   }
 
+    // ============ Product Categories ============
+  async getProductCategories(): Promise<ProductCategory[]> {
+    await delay(200);
+    return mockState.categories;
+  }
+
+  async createProductCategory(category: Omit<ProductCategory, 'id'>): Promise<ProductCategory> {
+    await delay(300);
+    const newCategory: ProductCategory = { ...category, id: generateId() };
+    mockState.categories.push(newCategory);
+    return newCategory;
+  }
+
+  async updateProductCategory(id: string, category: Partial<ProductCategory>): Promise<ProductCategory> {
+    await delay(300);
+    const index = mockState.categories.findIndex(c => c.id === id);
+    if (index === -1) throw new Error('Categoría no encontrada');
+    mockState.categories[index] = { ...mockState.categories[index], ...category };
+    return mockState.categories[index];
+  }
+
+  async deleteProductCategory(id: string): Promise<void> {
+    await delay(300);
+    const index = mockState.categories.findIndex(c => c.id === id);
+    if (index === -1) throw new Error('Categoría no encontrada');
+
+    const name = mockState.categories[index].name;
+    const usedByProduct = mockState.products.some(p => p.category === name);
+    if (usedByProduct) {
+      throw new Error('No se puede eliminar una categoría que tiene productos asociados');
+    }
+
+    mockState.categories.splice(index, 1);
+  }
+
   // ============ Pricing ============
   async getVariantPrices(): Promise<VariantPrice[]> {
     await delay(200);
@@ -459,10 +499,13 @@ export class MockApiClient implements ApiClient {
     if (!session || session.status !== 'OPEN') {
       throw new Error('No hay sesión de caja abierta');
     }
+    const total = lines.reduce(
+          (acc, l) => acc + l.unitPrice * l.quantity,
+          0
+        );
 
-    const subtotal = lines.reduce((sum, l) => sum + l.subtotal, 0);
-    const tax = Math.round(subtotal * 0.19);
-    const total = subtotal + tax;
+    const subtotal = Math.round(total / 1.19);   
+    const tax = total - subtotal;  
 
     const document: SalesDocument = {
       id: generateId(),
@@ -541,21 +584,14 @@ export class MockApiClient implements ApiClient {
       const dte = mockState.dteRequests.find(d => d.id === dteRequest.id);
       const doc = mockState.salesDocuments.find(d => d.id === document.id);
       if (dte && doc) {
-        // 90% success rate
-        if (Math.random() < 0.9) {
-          dte.status = 'ACCEPTED';
-          dte.folio = `${Date.now()}`;
-          dte.providerExternalId = `EXT-${dte.folio}`;
-          doc.status = 'ISSUED';
-          doc.folio = dte.folio;
-        } else {
-          dte.status = 'REJECTED';
-          dte.lastError = 'Error simulado: RUT inválido';
-          doc.status = 'REJECTED';
-        }
+        dte.status = 'ACCEPTED';
+        dte.folio = `${Date.now()}`;
+        dte.providerExternalId = `EXT-${dte.folio}`;
+        doc.status = 'ISSUED';
+        doc.folio = dte.folio;
         dte.updatedAt = new Date().toISOString();
       }
-    }, 2000);
+    }, 500);
 
     return { document, dteRequest };
   }
@@ -585,45 +621,33 @@ export class MockApiClient implements ApiClient {
   async voidSaleInternal(saleId: string, reason: string): Promise<SalesDocument> {
     await delay(400);
     
-    const document = mockState.salesDocuments.find(d => d.id === saleId);
-    if (!document) throw new Error('Venta no encontrada');
-    
-    if (document.status === 'ISSUED') {
-      throw new Error('No se puede anular internamente un documento ya emitido. Use Nota de Crédito.');
+    const doc = mockState.salesDocuments.find((d) => d.id === saleId);
+    if (!doc) {
+      throw new Error("Documento no encontrado");
     }
 
-    // Restore stock
-    const lines = mockState.salesLines.filter(l => l.salesDocumentId === saleId);
-    for (const line of lines) {
-      const stockItem = mockState.stock.find(s => s.branchId === document.branchId && s.variantId === line.variantId);
-      if (stockItem) {
-        stockItem.quantity += line.quantity;
-        stockItem.lastUpdated = new Date().toISOString();
-      }
+    // 2) Validar estado
+    if (doc.status !== "ISSUED") {
+      throw new Error("Solo se pueden anular documentos emitidos");
     }
 
-    // Reverse payments in cash session
-    const payments = mockState.payments.filter(p => p.salesDocumentId === saleId);
-    const session = mockState.cashSessions.find(s => s.id === document.cashSessionId);
-    if (session) {
-      const cashPayments = payments.filter(p => p.method === 'CASH').reduce((sum, p) => sum + p.amount, 0);
-      session.expectedCash -= cashPayments;
-    }
+    // 3) Cambiar estado a anulado interno
+    const beforeStatus = doc.status;
+    doc.status = "VOID_INTERNAL";
 
-    document.status = 'VOID_INTERNAL';
-
-    // Audit log
+    // 4) Registrar en auditoría (opcional, pero útil)
     mockState.auditLogs.push({
-      id: generateId(),
-      userId: this.currentUserId || 'user-1',
-      action: 'VOID_INTERNAL',
-      entityType: 'sales_document',
-      entityId: saleId,
-      afterData: { reason },
+      id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      userId: mockState.users[0]?.id ?? "user-1",
+      action: "VOID_SALE",
+      entityType: "SalesDocument",
+      entityId: doc.id,
+      beforeData: { status: beforeStatus },
+      afterData: { status: doc.status, reason },
       createdAt: new Date().toISOString(),
     });
 
-    return document;
+    return doc;
   }
 
   async createCreditNote(

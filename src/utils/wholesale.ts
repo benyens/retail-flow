@@ -1,185 +1,115 @@
-import type { CartLine, WholesaleTier, CartGroupSummary, PriceSource } from '@/types';
+import type { Cart, CartLine, CartGroupSummary, WholesaleTier } from "@/types";
 
-interface WholesaleInput {
-  variantId: string;
-  variantGroupId: string;
-  quantity: number;
-  basePrice: number;
-}
+const VAT_RATE = 0.19;
+const roundClp = (n: number) => Math.round(n);
 
-interface WholesaleOutput {
-  unitPrice: number;
-  priceSource: PriceSource;
-  wholesaleMinQtyApplied?: number;
-  wholesaleUnitPriceApplied?: number;
-}
-
-interface GroupTotals {
-  [variantGroupId: string]: {
-    totalQty: number;
-    lines: WholesaleInput[];
-  };
+/**
+ * Elegir tramo activo: el de mayor minQty <= totalQty
+ */
+function pickActiveTier(groupTiers: WholesaleTier[], totalQty: number) {
+  let active: WholesaleTier | undefined;
+  for (const t of groupTiers) {
+    if (t.minQty <= totalQty) active = t;
+    else break;
+  }
+  return active;
 }
 
 /**
- * Calculate wholesale pricing for cart lines.
- * 
- * Rules:
- * 1. Sum qty by variant_group_id (even if different variants like aromas)
- * 2. Find active tier: largest min_qty <= total_qty
- * 3. Apply same unit_price to ALL lines in the group
- * 4. Recalculate automatically when qty changes
+ * Recalcula TODO el carrito:
+ * - suma cantidades por grupo de equivalencia
+ * - elige tramo mayorista por grupo
+ * - aplica precios (respeta MANUAL)
+ * - calcula neto/iva/total asumiendo que los precios YA incluyen IVA
  */
-export function calculateWholesalePricing(
-  lines: WholesaleInput[],
-  tiers: WholesaleTier[]
-): Map<string, WholesaleOutput> {
-  const results = new Map<string, WholesaleOutput>();
-  
-  // Group lines by variant_group_id
-  const groupTotals: GroupTotals = {};
-  
-  for (const line of lines) {
-    if (!groupTotals[line.variantGroupId]) {
-      groupTotals[line.variantGroupId] = { totalQty: 0, lines: [] };
+export function recalculateCart(lines: CartLine[], wholesaleTiers: WholesaleTier[]): Cart {
+  // Index de tramos por grupo
+  const tiersByGroup = new Map<string, WholesaleTier[]>();
+  for (const t of wholesaleTiers) {
+    const arr = tiersByGroup.get(t.variantGroupId) ?? [];
+    arr.push(t);
+    tiersByGroup.set(t.variantGroupId, arr);
+  }
+  for (const [gid, arr] of tiersByGroup.entries()) {
+    arr.sort((a, b) => a.minQty - b.minQty);
+    tiersByGroup.set(gid, arr);
+  }
+
+  // Cantidad total por grupo
+  const qtyByGroup = new Map<string, number>();
+  for (const l of lines) {
+    qtyByGroup.set(l.variantGroupId, (qtyByGroup.get(l.variantGroupId) ?? 0) + l.quantity);
+  }
+
+  // Tramo activo por grupo
+  const activeTierByGroup = new Map<string, WholesaleTier | undefined>();
+  for (const [gid, totalQty] of qtyByGroup.entries()) {
+    const groupTiers = tiersByGroup.get(gid) ?? [];
+    activeTierByGroup.set(gid, pickActiveTier(groupTiers, totalQty));
+  }
+
+  // Aplicar precios línea a línea
+  const newLines: CartLine[] = lines.map((l) => {
+    if (l.priceSource === "MANUAL") {
+      return { ...l, subtotal: roundClp(l.unitPrice * l.quantity) };
     }
-    groupTotals[line.variantGroupId].totalQty += line.quantity;
-    groupTotals[line.variantGroupId].lines.push(line);
-  }
-  
-  // Process each group
-  for (const [variantGroupId, group] of Object.entries(groupTotals)) {
-    // Find tiers for this group (sorted by minQty descending)
-    const groupTiers = tiers
-      .filter(t => t.variantGroupId === variantGroupId)
-      .sort((a, b) => b.minQty - a.minQty);
-    
-    // Find active tier: largest min_qty <= total_qty
-    const activeTier = groupTiers.find(t => t.minQty <= group.totalQty);
-    
-    // Apply pricing to all lines in the group
-    for (const line of group.lines) {
-      if (activeTier) {
-        results.set(`${line.variantId}`, {
-          unitPrice: activeTier.unitPrice,
-          priceSource: 'WHOLESALE',
-          wholesaleMinQtyApplied: activeTier.minQty,
-          wholesaleUnitPriceApplied: activeTier.unitPrice,
-        });
-      } else {
-        results.set(`${line.variantId}`, {
-          unitPrice: line.basePrice,
-          priceSource: 'NORMAL',
-        });
-      }
-    }
-  }
-  
-  return results;
-}
 
-/**
- * Get summary of wholesale pricing per variant group
- */
-export function getGroupSummaries(
-  lines: CartLine[],
-  tiers: WholesaleTier[]
-): CartGroupSummary[] {
-  const groupMap = new Map<string, {
-    variantGroupName: string;
-    totalQty: number;
-    basePrice: number;
-  }>();
-  
-  // Aggregate by group
-  for (const line of lines) {
-    const existing = groupMap.get(line.variantGroupId);
-    if (existing) {
-      existing.totalQty += line.quantity;
-    } else {
-      groupMap.set(line.variantGroupId, {
-        variantGroupName: line.variant.variantGroup.name,
-        totalQty: line.quantity,
-        basePrice: line.basePrice,
-      });
-    }
-  }
-  
-  // Calculate summaries
-  const summaries: CartGroupSummary[] = [];
-  
-  for (const [variantGroupId, group] of groupMap) {
-    const groupTiers = tiers
-      .filter(t => t.variantGroupId === variantGroupId)
-      .sort((a, b) => b.minQty - a.minQty);
-    
-    const activeTier = groupTiers.find(t => t.minQty <= group.totalQty);
-    
-    summaries.push({
-      variantGroupId,
-      variantGroupName: group.variantGroupName,
-      totalQty: group.totalQty,
-      activeTier,
-      appliedUnitPrice: activeTier ? activeTier.unitPrice : group.basePrice,
-      isWholesale: !!activeTier,
-    });
-  }
-  
-  return summaries;
-}
-
-/**
- * Get next tier info for a group (for UI hints)
- */
-export function getNextTierInfo(
-  variantGroupId: string,
-  currentQty: number,
-  tiers: WholesaleTier[]
-): { nextTier: WholesaleTier; qtyNeeded: number } | null {
-  const groupTiers = tiers
-    .filter(t => t.variantGroupId === variantGroupId)
-    .sort((a, b) => a.minQty - b.minQty);
-  
-  const nextTier = groupTiers.find(t => t.minQty > currentQty);
-  
-  if (nextTier) {
-    return {
-      nextTier,
-      qtyNeeded: nextTier.minQty - currentQty,
-    };
-  }
-  
-  return null;
-}
-
-/**
- * Apply wholesale pricing to cart lines and return updated cart
- */
-export function applyWholesalePricing(
-  lines: CartLine[],
-  tiers: WholesaleTier[]
-): CartLine[] {
-  const inputs: WholesaleInput[] = lines.map(l => ({
-    variantId: l.variantId,
-    variantGroupId: l.variantGroupId,
-    quantity: l.quantity,
-    basePrice: l.basePrice,
-  }));
-  
-  const pricingResults = calculateWholesalePricing(inputs, tiers);
-  
-  return lines.map(line => {
-    const pricing = pricingResults.get(line.variantId);
-    if (pricing) {
+    const activeTier = activeTierByGroup.get(l.variantGroupId);
+    if (activeTier) {
+      const unitPrice = activeTier.unitPrice;
       return {
-        ...line,
-        unitPrice: pricing.unitPrice,
-        priceSource: pricing.priceSource,
-        wholesaleMinQtyApplied: pricing.wholesaleMinQtyApplied,
-        wholesaleUnitPriceApplied: pricing.wholesaleUnitPriceApplied,
-        subtotal: line.quantity * pricing.unitPrice,
+        ...l,
+        unitPrice,
+        priceSource: "WHOLESALE",
+        wholesaleMinQtyApplied: activeTier.minQty,
+        wholesaleUnitPriceApplied: activeTier.unitPrice,
+        subtotal: roundClp(unitPrice * l.quantity),
       };
     }
-    return line;
+
+    // Sin tramo -> precio normal
+    const unitPrice = l.basePrice;
+    return {
+      ...l,
+      unitPrice,
+      priceSource: "NORMAL",
+      wholesaleMinQtyApplied: undefined,
+      wholesaleUnitPriceApplied: undefined,
+      subtotal: roundClp(unitPrice * l.quantity),
+    };
   });
+
+  // Resumen por grupo (para panel mayorista)
+  const groupSummaries: CartGroupSummary[] = [];
+  for (const [gid, totalQty] of qtyByGroup.entries()) {
+    const sample = newLines.find((x) => x.variantGroupId === gid);
+    const activeTier = activeTierByGroup.get(gid);
+    const isWholesale = Boolean(activeTier);
+
+    groupSummaries.push({
+      variantGroupId: gid,
+      variantGroupName: sample?.variant?.variantGroup?.name ?? "Grupo",
+      totalQty,
+      activeTier,
+      appliedUnitPrice: isWholesale
+        ? activeTier?.unitPrice ?? 0
+        : sample?.basePrice ?? 0,
+      isWholesale,
+    });
+  }
+
+  // Total bruto (precios ya vienen con IVA incluido)
+  const total = newLines.reduce((acc, l) => acc + (l.subtotal ?? 0), 0);
+
+  // Desglosar neto + IVA desde total
+  const net = Math.round(total / (1 + VAT_RATE));
+  const tax = total - net;
+
+  return {
+    lines: newLines,
+    groupSummaries,
+    subtotal: net, // Neto
+    tax,           // IVA incluido
+    total,         // Total IVA incl.
+  };
 }

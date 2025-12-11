@@ -33,6 +33,7 @@ import type {
   DocumentType,
   PaymentMethod,
   RefType,
+  ProductCategory,
 } from '@/types';
 
 // ============ API Client Interface ============
@@ -80,6 +81,13 @@ export interface ApiClient {
   deleteVariant(id: string): Promise<void>;
   searchVariants(query: string): Promise<VariantWithProduct[]>;
   
+
+  // Product categories
+  getProductCategories(): Promise<ProductCategory[]>;
+  createProductCategory(category: Omit<ProductCategory, 'id'>): Promise<ProductCategory>;
+  updateProductCategory(id: string, category: Partial<ProductCategory>): Promise<ProductCategory>;
+  deleteProductCategory(id: string): Promise<void>;
+
   // Pricing
   getVariantPrices(): Promise<VariantPrice[]>;
   setVariantPrice(variantId: string, priceListId: string, price: number): Promise<VariantPrice>;
@@ -98,6 +106,7 @@ export interface ApiClient {
   // Customers
   getCustomers(): Promise<Customer[]>;
   createCustomer(customer: Omit<Customer, 'id'>): Promise<Customer>;
+  updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer>;
   searchCustomers(query: string): Promise<Customer[]>;
   
   // Sales

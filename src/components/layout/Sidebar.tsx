@@ -18,6 +18,7 @@ import {
   LogOut,
   Store,
   ChevronDown,
+  DollarSign,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +38,7 @@ const posLinks = [
 
 const adminLinks = [
   { to: '/admin/catalog', icon: Package, label: 'Catálogo' },
+  { to: '/admin/pricing', icon: DollarSign, label: 'Precios' },
   { to: '/admin/wholesale', icon: Tags, label: 'Mayorista' },
   { to: '/admin/stock', icon: Boxes, label: 'Stock' },
   { to: '/admin/purchases', icon: Truck, label: 'Compras' },
@@ -102,6 +104,7 @@ export default function Sidebar() {
               <NavLink
                 key={link.to}
                 to={link.to}
+                end={link.to === '/pos'} 
                 className={({ isActive }) => cn(
                   'sidebar-item',
                   isActive && 'sidebar-item-active'

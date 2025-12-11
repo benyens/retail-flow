@@ -144,3 +144,30 @@ export function getCashMovementConceptLabel(concept: string): string {
   };
   return labels[concept] || concept;
 }
+
+/**
+ * Generate a SKU-like id from a base name.
+ * Ej: "Desodorante Fresh" -> "DESODORANTE-FRESH-ABC"
+ */
+export function generateIdLikeSku(base: string): string {
+  if (!base) {
+    return `SKU-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  }
+
+  // Normalizar (quitar tildes, etc.)
+  const normalized = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  // Dejar solo letras/números y guiones
+  const slug = normalized
+    .replace(/[^A-Z0-9]+/g, '-')  // espacios y rarezas -> '-'
+    .replace(/^-+|-+$/g, '')      // quitar guiones al inicio/fin
+    .slice(0, 16);                // limitar largo
+
+  // Sufijo corto para evitar colisión
+  const suffix = Math.random().toString(36).slice(2, 5).toUpperCase();
+
+  return `${slug || 'SKU'}-${suffix}`;
+}

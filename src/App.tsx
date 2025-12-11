@@ -8,6 +8,12 @@ import LoginPage from "@/pages/LoginPage";
 import MainLayout from "@/components/layout/MainLayout";
 import POSPage from "@/modules/pos/pages/POSPage";
 import NotFound from "./pages/NotFound";
+import SalesHistoryPage from "./modules/pos/pages/SalesHistoryPage";  
+import CashMovementsPage from "@/modules/pos/pages/CashMovementsPage";
+import CashClosePage from "@/modules/pos/pages/CashClosePage";
+import WholesalePage from "@/modules/admin/pages/WholesalePage";
+import PriceManagementPage from "@/modules/admin/pages/PriceManagmentPage";
+import ProductCatalogPage from "@/modules/admin/pages/ProductCatalogPage";
 
 const queryClient = new QueryClient();
 
@@ -35,13 +41,17 @@ function AppRoutes() {
       }>
         <Route index element={<Navigate to="/pos" replace />} />
         <Route path="pos" element={<POSPage />} />
-        <Route path="pos/sales" element={<div className="p-8"><h1 className="text-2xl font-bold">Ventas del Día</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="pos/returns" element={<div className="p-8"><h1 className="text-2xl font-bold">Devoluciones</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="pos/cash-movements" element={<div className="p-8"><h1 className="text-2xl font-bold">Movimientos de Caja</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="pos/close" element={<div className="p-8"><h1 className="text-2xl font-bold">Cierre de Caja</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        
-        <Route path="admin/catalog" element={<div className="p-8"><h1 className="text-2xl font-bold">Catálogo</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/wholesale" element={<div className="p-8"><h1 className="text-2xl font-bold">Mayorista</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
+
+        {/* aquí usamos la página de historial de ventas */}
+        <Route path="pos/sales" element={<SalesHistoryPage mode="sales" />} />
+
+        <Route path="pos/returns" element={<SalesHistoryPage mode="returns" />} />
+        <Route path="pos/cash-movements" element={<CashMovementsPage />} />
+        <Route path="pos/close" element={<CashClosePage />} />
+    
+        <Route path="admin/catalog" element={<ProductCatalogPage />} />
+        <Route path="admin/pricing" element={<PriceManagementPage />} />
+        <Route path="admin/wholesale" element={<WholesalePage />} />
         <Route path="admin/stock" element={<div className="p-8"><h1 className="text-2xl font-bold">Stock</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
         <Route path="admin/purchases" element={<div className="p-8"><h1 className="text-2xl font-bold">Compras</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
         <Route path="admin/employees" element={<div className="p-8"><h1 className="text-2xl font-bold">Empleados</h1><p className="text-muted-foreground">Próximamente...</p></div>} />

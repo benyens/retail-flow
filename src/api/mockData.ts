@@ -25,6 +25,7 @@ import type {
   PurchaseLine,
   EmployeeAdvance,
   AuditLog,
+  ProductCategory,
 } from '@/types';
 
 // ============ Seed Data ============
@@ -86,6 +87,21 @@ export const VARIANT_GROUPS: VariantGroup[] = [
   { id: 'vg-1', name: 'Desodorante Spray 150ml', description: 'Desodorantes en spray 150ml - diferentes aromas' },
   { id: 'vg-2', name: 'Jabón Líquido 500ml', description: 'Jabón líquido 500ml - diferentes fragancias' },
   { id: 'vg-3', name: 'Shampoo 400ml', description: 'Shampoo 400ml - diferentes tipos' },
+];
+
+export const PRODUCT_CATEGORIES: ProductCategory[] = [
+  {
+    id: 'cat-1',
+    name: 'Higiene Personal',
+    description: 'Desodorantes, shampoos, jabones, etc.',
+    isActive: true,
+  },
+  {
+    id: 'cat-2',
+    name: 'Abarrotes',
+    description: 'Alimentos, arroz, aceite, etc.',
+    isActive: true,
+  },
 ];
 
 export const PRODUCTS: Product[] = [
@@ -210,6 +226,7 @@ export const mockState = {
   variantPrices: [...VARIANT_PRICES],
   wholesaleTiers: [...WHOLESALE_TIERS],
   users: [...USERS],
+  categories: [...PRODUCT_CATEGORIES],
 };
 
 // Helper to get variant with product info

@@ -120,7 +120,15 @@ export interface Product {
   description?: string;
   category: string;
   isActive: boolean;
+} 
+
+export interface ProductCategory {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
 }
+
 
 export interface VariantGroup {
   id: string;

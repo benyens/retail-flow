@@ -1,13 +1,12 @@
-import { MockApiClient } from './mockApiClient';
+import { MockApiClient } from "./mockApiClient";
+// import { HttpApiClient } from "./httpApiClient"; // lo agregaremos después
 
-// Get API base URL from environment
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const USE_MOCK = (import.meta.env.VITE_USE_MOCK || "true") === "true";
 
-// For now, always use MockApiClient
-// To switch to a real backend:
-// 1. Set VITE_API_BASE_URL in .env
-// 2. Implement HttpApiClient following the ApiClient interface
+// Hoy: solo mock
 export const apiClient = new MockApiClient();
 
-// Re-export types
-export type { ApiClient } from './client';
+// Después será algo como:
+// export const apiClient = USE_MOCK ? new MockApiClient() : new HttpApiClient({...});
+
+export type { ApiClient } from "./client";
