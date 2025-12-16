@@ -14,6 +14,7 @@ import CashClosePage from "@/modules/pos/pages/CashClosePage";
 import WholesalePage from "@/modules/admin/pages/WholesalePage";
 import PriceManagementPage from "@/modules/admin/pages/PriceManagmentPage";
 import ProductCatalogPage from "@/modules/admin/pages/ProductCatalogPage";
+import PurchaseEntryPage from "@/modules/purchases/pages/PurchaseEntryPage";
 
 const queryClient = new QueryClient();
 
@@ -43,15 +44,16 @@ function AppRoutes() {
         <Route path="pos" element={<POSPage />} />
 
         {/* aquí usamos la página de historial de ventas */}
-        <Route path="pos/sales" element={<SalesHistoryPage mode="sales" />} />
+        <Route path="pos/ventas" element={<SalesHistoryPage mode="sales" />} />
 
-        <Route path="pos/returns" element={<SalesHistoryPage mode="returns" />} />
-        <Route path="pos/cash-movements" element={<CashMovementsPage />} />
-        <Route path="pos/close" element={<CashClosePage />} />
+        <Route path="pos/devoluciones" element={<SalesHistoryPage mode="returns" />} />
+        <Route path="pos/movimientos" element={<CashMovementsPage />} />
+        <Route path="pos/cerrar" element={<CashClosePage />} />
     
-        <Route path="admin/catalog" element={<ProductCatalogPage />} />
-        <Route path="admin/pricing" element={<PriceManagementPage />} />
-        <Route path="admin/wholesale" element={<WholesalePage />} />
+        <Route path="admin/catalogo" element={<ProductCatalogPage />} />
+        <Route path="admin/precios" element={<PriceManagementPage />} />
+        <Route path="admin/mayorista" element={<WholesalePage />} />
+        <Route path="admin/ingresar-factura" element={<PurchaseEntryPage />} />
         <Route path="admin/stock" element={<div className="p-8"><h1 className="text-2xl font-bold">Stock</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
         <Route path="admin/purchases" element={<div className="p-8"><h1 className="text-2xl font-bold">Compras</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
         <Route path="admin/employees" element={<div className="p-8"><h1 className="text-2xl font-bold">Empleados</h1><p className="text-muted-foreground">Próximamente...</p></div>} />

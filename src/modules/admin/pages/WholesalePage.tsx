@@ -1,3 +1,4 @@
+// src/modules/admin/pages/WholesalePage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/api";
 import { useApp } from "@/state/AppContext";
@@ -14,8 +15,16 @@ import type { VariantGroup, WholesaleTier, VariantWithProduct } from "@/types";
 import { formatCurrency } from "@/utils/format";
 import * as XLSX from "xlsx";
 
-
 type Mode = "new" | "edit";
+
+// ---- helper para evitar tramos duplicados ----
+const dedupeTiers = (list: WholesaleTier[]): WholesaleTier[] => {
+  const map = new Map<string, WholesaleTier>();
+  for (const t of list) {
+    map.set(t.id, t); // el último con ese id gana
+  }
+  return Array.from(map.values());
+};
 
 export default function WholesalePage() {
   const { selectedBranch } = useApp();
@@ -34,6 +43,13 @@ export default function WholesalePage() {
   const [unitPrice, setUnitPrice] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
+  // wrapper para actualizar tiers sin duplicados
+  const updateTiers = (
+    updater: (prev: WholesaleTier[]) => WholesaleTier[]
+  ) => {
+    setTiers((prev) => dedupeTiers(updater(prev)));
+  };
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -44,7 +60,7 @@ export default function WholesalePage() {
           apiClient.getVariants(),
         ]);
         setGroups(gs);
-        setTiers(ts);
+        updateTiers(() => ts);
         setVariants(vs);
         if (!selectedGroupId && gs.length > 0) {
           setSelectedGroupId(gs[0].id);
@@ -91,6 +107,16 @@ export default function WholesalePage() {
     [variants, selectedGroupId]
   );
 
+  const groupMaxCost = useMemo(() => {
+    const costs = groupVariants
+      .map((v) => v.lastPurchaseCost)
+      .filter((c): c is number => typeof c === "number" && c > 0);
+
+    if (costs.length === 0) return null;
+
+    return Math.max(...costs);
+  }, [groupVariants]);
+
   const resetForm = () => {
     setMode("new");
     setEditingTierId(null);
@@ -109,7 +135,7 @@ export default function WholesalePage() {
     if (!confirm("¿Eliminar este tramo mayorista?")) return;
     try {
       await apiClient.deleteWholesaleTier(tier.id);
-      setTiers((prev) => prev.filter((t) => t.id !== tier.id));
+      updateTiers((prev) => prev.filter((t) => t.id !== tier.id));
       toast.success("Tramo eliminado");
       if (editingTierId === tier.id) {
         resetForm();
@@ -145,14 +171,16 @@ export default function WholesalePage() {
           minQty: qty,
           unitPrice: price,
         });
-        setTiers((prev) => [...prev, newTier]);
+
+        updateTiers((prev) => [...prev, newTier]);
         toast.success("Tramo mayorista creado");
       } else if (mode === "edit" && editingTierId) {
         const updated = await apiClient.updateWholesaleTier(editingTierId, {
           minQty: qty,
           unitPrice: price,
         });
-        setTiers((prev) =>
+
+        updateTiers((prev) =>
           prev.map((t) => (t.id === updated.id ? updated : t))
         );
         toast.success("Tramo mayorista actualizado");
@@ -183,8 +211,10 @@ export default function WholesalePage() {
 
           {selectedBranch && (
             <p className="text-xs text-muted-foreground">
-              Las reglas mayoristas son <span className="font-semibold">globales</span>{" "}
-              (aplican a todas las sucursales), pero el stock sigue siendo por sucursal.
+              Las reglas mayoristas son{" "}
+              <span className="font-semibold">globales</span>{" "}
+              (aplican a todas las sucursales), pero el stock sigue siendo por
+              sucursal.
             </p>
           )}
 
@@ -266,14 +296,23 @@ export default function WholesalePage() {
                           <thead className="bg-muted/60">
                             <tr>
                               <th className="px-3 py-1 text-left">SKU</th>
-                              <th className="px-3 py-1 text-left">Descripción</th>
-                              <th className="px-3 py-1 text-left">Atributos</th>
+                              <th className="px-3 py-1 text-left">
+                                Descripción
+                              </th>
+                              <th className="px-3 py-1 text-left">
+                                Atributos
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {groupVariants.map((v) => (
-                              <tr key={v.id} className="border-t last:border-b-0">
-                                <td className="px-3 py-1 font-mono">{v.sku}</td>
+                              <tr
+                                key={v.id}
+                                className="border-t last:border-b-0"
+                              >
+                                <td className="px-3 py-1 font-mono">
+                                  {v.sku}
+                                </td>
                                 <td className="px-3 py-1">
                                   {v.product.name} - {v.name}
                                 </td>
@@ -309,38 +348,51 @@ export default function WholesalePage() {
                             <th className="px-3 py-2 text-left">
                               Precio unitario mayorista
                             </th>
+                             <th className="px-3 py-2 text-left">
+                              Margen vs. costo
+                            </th>
                             <th className="px-3 py-2 text-right">Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {groupTiers.map((t) => (
-                            <tr
-                              key={t.id}
-                              className="border-t last:border-b-0"
-                            >
-                              <td className="px-3 py-2">{t.minQty} unid.</td>
-                              <td className="px-3 py-2">
-                                {formatCurrency(t.unitPrice)}
-                              </td>
-                              <td className="px-3 py-2 text-right space-x-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleEdit(t)}
-                                >
-                                  Editar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-red-600"
-                                  onClick={() => handleDelete(t)}
-                                >
-                                  Eliminar
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
+                          {groupTiers.map((t) => {
+                            // calcular margen solo si tenemos costo
+                            let marginText = "—";
+                            if (groupMaxCost && groupMaxCost > 0) {
+                              const diff = t.unitPrice - groupMaxCost; // $ que se gana por unidad
+                              const pct = (diff / groupMaxCost) * 100; // % sobre el costo
+                              marginText = `${formatCurrency(diff)} (${pct.toFixed(1)}%)`;
+                            }
+
+                            return (
+                              <tr key={t.id} className="border-t last:border-b-0">
+                                <td className="px-3 py-2">{t.minQty} unid.</td>
+                                <td className="px-3 py-2">
+                                  {formatCurrency(t.unitPrice)}
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {marginText}
+                                </td>
+                                <td className="px-3 py-2 text-right space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleEdit(t)}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600"
+                                    onClick={() => handleDelete(t)}
+                                  >
+                                    Eliminar
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
@@ -402,6 +454,29 @@ export default function WholesalePage() {
                         </Button>
                       </div>
                     </div>
+                    {groupMaxCost && unitPrice && Number(unitPrice) > 0 && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Con precio{" "}
+                        <span className="font-mono">
+                          {formatCurrency(Number(unitPrice))}
+                        </span>{" "}
+                        y último costo más alto del grupo{" "}
+                        <span className="font-mono">
+                          {formatCurrency(groupMaxCost)}
+                        </span>{" "}
+                        el margen por unidad es{" "}
+                        <span className="font-semibold">
+                          {formatCurrency(Number(unitPrice) - groupMaxCost)} (
+                          {(
+                            ((Number(unitPrice) - groupMaxCost) /
+                              groupMaxCost) *
+                            100
+                          ).toFixed(1)}
+                          %)
+                        </span>
+                        .
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -412,6 +487,7 @@ export default function WholesalePage() {
               )}
             </div>
           </div>
+
           {/* Importar tramos mayoristas desde Excel */}
           <div className="mt-6 border-t pt-4">
             <p className="text-sm font-medium mb-2">
@@ -422,7 +498,7 @@ export default function WholesalePage() {
               <code className="bg-muted px-1 rounded">
                 group_name, minQty, unitPrice
               </code>
-              . Donde <code>group_name</code> coincide con el nombre del{" "}
+              . Donde <code>group_name</code> coincide con el nombre del
               producto base mayorista (grupo de variantes).
             </p>
             <Input
@@ -462,7 +538,6 @@ export default function WholesalePage() {
                         (g) => g.name.toLowerCase() === key
                       );
                     if (!group) {
-                      // Si no existe el grupo, lo saltamos (o podríamos crearlo)
                       console.warn(
                         "Grupo no encontrado para importación:",
                         rawName
@@ -487,7 +562,7 @@ export default function WholesalePage() {
                       "No se creó ningún tramo. Revisa los datos del archivo."
                     );
                   } else {
-                    setTiers((prev) => [...prev, ...newTiers]);
+                    updateTiers((prev) => [...prev, ...newTiers]);
                     toast.success(
                       `Se importaron ${newTiers.length} tramo(s) mayoristas`
                     );

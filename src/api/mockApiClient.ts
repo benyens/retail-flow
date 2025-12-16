@@ -411,6 +411,20 @@ export class MockApiClient implements ApiClient {
     return mockState.stock.filter(s => s.branchId === branchId);
   }
 
+  async getStockByVariant(variantId: string): Promise<{ branchId: string; branchName: string; quantity: number }[]> {
+    await delay(200);
+    const stocks = mockState.stock.filter(s => s.variantId === variantId);
+
+    return stocks.map(s => {
+      const branch = BRANCHES.find(b => b.id === s.branchId);
+      return {
+        branchId: s.branchId,
+        branchName: branch?.name ?? 'Sucursal',
+        quantity: s.quantity,
+      };
+    });
+  }
+
   async getInventoryMovements(branchId: string): Promise<InventoryMovement[]> {
     await delay(200);
     return mockState.inventoryMovements.filter(m => m.branchId === branchId);
@@ -853,7 +867,9 @@ export class MockApiClient implements ApiClient {
         subtotal: line.quantity * line.unitCost,
       });
 
-      const stockItem = mockState.stock.find(s => s.branchId === branchId && s.variantId === line.variantId);
+      const stockItem = mockState.stock.find(
+        s => s.branchId === branchId && s.variantId === line.variantId
+      );
       if (stockItem) {
         stockItem.quantity += line.quantity;
         stockItem.lastUpdated = new Date().toISOString();
@@ -865,22 +881,30 @@ export class MockApiClient implements ApiClient {
           lastUpdated: new Date().toISOString(),
         });
       }
+
+      // 👇 AQUÍ: actualizar lastPurchaseCost de la variante
+      const variant = mockState.variants.find(v => v.id === line.variantId);
+      if (variant) {
+        (variant as Variant).lastPurchaseCost = line.unitCost;
+        (variant as any).lastPurchaseDate = new Date().toISOString();
+      }
     }
 
-    // Create inventory movement
-    const movement: InventoryMovement = {
-      id: generateId(),
-      branchId,
-      type: 'PURCHASE',
-      referenceId: invoice.id,
-      referenceType: 'purchase_invoice',
-      createdAt: new Date().toISOString(),
-      createdBy: this.currentUserId || 'user-1',
-    };
-    mockState.inventoryMovements.push(movement);
+  // Create inventory movement
+  const movement: InventoryMovement = {
+    id: generateId(),
+    branchId,
+    type: 'PURCHASE',
+    referenceId: invoice.id,
+    referenceType: 'purchase_invoice',
+    createdAt: new Date().toISOString(),
+    createdBy: this.currentUserId || 'user-1',
+  };
+  mockState.inventoryMovements.push(movement);
 
-    return invoice;
-  }
+  return invoice;
+}
+
 
   // ============ Employees ============
   async getEmployees(branchId: string): Promise<Employee[]> {

@@ -30,16 +30,17 @@ import {
 
 const posLinks = [
   { to: '/pos', icon: ShoppingCart, label: 'Venta' },
-  { to: '/pos/sales', icon: Receipt, label: 'Ventas del Día' },
-  { to: '/pos/returns', icon: RotateCcw, label: 'Devoluciones' },
-  { to: '/pos/cash-movements', icon: ArrowLeftRight, label: 'Movimientos' },
-  { to: '/pos/close', icon: Clock, label: 'Cierre Caja' },
+  { to: '/pos/ventas', icon: Receipt, label: 'Ventas del Día' },
+  { to: '/pos/devoluciones', icon: RotateCcw, label: 'Devoluciones' },
+  { to: '/pos/movimientos', icon: ArrowLeftRight, label: 'Movimientos' },
+  { to: '/pos/cerrar', icon: Clock, label: 'Cierre Caja' },
 ];
 
 const adminLinks = [
-  { to: '/admin/catalog', icon: Package, label: 'Catálogo' },
-  { to: '/admin/pricing', icon: DollarSign, label: 'Precios' },
-  { to: '/admin/wholesale', icon: Tags, label: 'Mayorista' },
+  { to: '/admin/catalogo', icon: Package, label: 'Catálogo' },
+  { to: '/admin/precios', icon: DollarSign, label: 'Precios' },
+  { to: '/admin/mayorista', icon: Tags, label: 'Mayorista' },
+  { to: '/admin/ingresar-factura', icon: Receipt, label: 'Ingresar Factura' },
   { to: '/admin/stock', icon: Boxes, label: 'Stock' },
   { to: '/admin/purchases', icon: Truck, label: 'Compras' },
   { to: '/admin/employees', icon: Users, label: 'Empleados' },

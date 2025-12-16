@@ -146,6 +146,8 @@ export interface Variant {
   unit: string;
   barcode?: string;
   isActive: boolean;
+  lastPurchaseCost?: number | null;
+  lastPurchaseDate?: string | null;
 }
 
 export interface VariantWithProduct extends Variant {
@@ -214,7 +216,7 @@ export interface InventoryLine {
 export type DocumentType = 'BOLETA' | 'FACTURA' | 'CREDIT_NOTE';
 export type DocumentStatus = 'PENDING_ISSUE' | 'ISSUED' | 'REJECTED' | 'VOID_INTERNAL';
 export type PriceSource = 'NORMAL' | 'WHOLESALE' | 'MANUAL';
-export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'OTHER';
 
 export interface Customer {
   id: string;

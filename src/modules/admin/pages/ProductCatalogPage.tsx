@@ -1,10 +1,22 @@
 // src/modules/admin/pages/ProductCatalogPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/api";
-import { Product, Variant, VariantGroup, VariantWithProduct } from "@/types";
+import {
+  Product,
+  Variant,
+  VariantGroup,
+  VariantWithProduct,
+} from "@/types";
 import { cn } from "@/lib/utils";
 import { generateIdLikeSku } from "@/utils/format";
-import { Edit2, Trash2, Plus, Package2, Tag, Layers } from "lucide-react";
+import {
+  Edit2,
+  Trash2,
+  Plus,
+  Package2,
+  Tag,
+  Layers,
+} from "lucide-react";
 
 import {
   Card,
@@ -43,6 +55,7 @@ import {
 } from "@/components/ui/table";
 import { useDebounce } from "@/hooks/use-debounce";
 import { toast } from "sonner";
+import { formatCurrency } from "@/utils/format";
 
 // Helpers locales
 type ProductFormState = {
@@ -66,6 +79,7 @@ type VariantFormState = {
   unit: string;
   attributes: string; // JSON plano "clave=valor, clave2=valor2"
   variantGroupId: string;
+  cost: string; // costo unitario (última compra)
 };
 
 function buildVariantWithProduct(
@@ -74,19 +88,24 @@ function buildVariantWithProduct(
   groups: VariantGroup[]
 ): VariantWithProduct | null {
   const product = products.find((p) => p.id === v.productId);
-  const variantGroup = groups.find((g) => g.id === v.variantGroupId);
+  const variantGroup = groups.find(
+    (g) => g.id === v.variantGroupId
+  );
   if (!product || !variantGroup) return null;
-  return { ...v, product, variantGroup };
+  return { ...v, product, variantGroup } as VariantWithProduct;
 }
 
 export default function ProductCatalogPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<VariantWithProduct[]>([]);
-  const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
+  const [variantGroups, setVariantGroups] = useState<VariantGroup[]>(
+    []
+  );
 
   // Categorías
   const [categories, setCategories] = useState<string[]>([]);
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] =
+    useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSavingCategory, setIsSavingCategory] = useState(false);
 
@@ -95,31 +114,34 @@ export default function ProductCatalogPage() {
   const [newGroupDesc, setNewGroupDesc] = useState("");
   const [isVariantGroupDialogOpen, setIsVariantGroupDialogOpen] =
     useState(false);
-  const [isSavingVariantGroup, setIsSavingVariantGroup] = useState(false);
+  const [isSavingVariantGroup, setIsSavingVariantGroup] =
+    useState(false);
 
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    null
-  );
+  const [selectedProductId, setSelectedProductId] =
+    useState<string | null>(null);
 
-  const [productForm, setProductForm] = useState<ProductFormState>({
-    name: "",
-    description: "",
-    category: "",
-    isActive: true,
-    hasVariants: true,
-    autoSku: "",
-    autoBarcode: "",
-    autoUnit: "UN",
-  });
+  const [productForm, setProductForm] =
+    useState<ProductFormState>({
+      name: "",
+      description: "",
+      category: "",
+      isActive: true,
+      hasVariants: true,
+      autoSku: "",
+      autoBarcode: "",
+      autoUnit: "UN",
+    });
 
-  const [variantForm, setVariantForm] = useState<VariantFormState>({
-    sku: "",
-    name: "",
-    barcode: "",
-    unit: "UN",
-    attributes: "",
-    variantGroupId: "",
-  });
+  const [variantForm, setVariantForm] =
+    useState<VariantFormState>({
+      sku: "",
+      name: "",
+      barcode: "",
+      unit: "UN",
+      attributes: "",
+      variantGroupId: "",
+      cost: "",
+    });
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
@@ -144,7 +166,9 @@ export default function ProductCatalogPage() {
 
         const variantsWith = allVariants
           .map((v) => buildVariantWithProduct(v, prods, groups))
-          .filter((v): v is VariantWithProduct => !!v);
+          .filter(
+            (v): v is VariantWithProduct => !!v
+          );
 
         setVariants(variantsWith);
 
@@ -153,7 +177,9 @@ export default function ProductCatalogPage() {
           new Set(
             prods
               .map((p) => p.category?.trim())
-              .filter((c): c is string => !!c)
+              .filter(
+                (c): c is string => !!c
+              )
           )
         ).sort((a, b) => a.localeCompare(b));
         setCategories(uniqueCats);
@@ -174,7 +200,9 @@ export default function ProductCatalogPage() {
   }, []);
 
   const selectedProduct = useMemo(
-    () => products.find((p) => p.id === selectedProductId) || null,
+    () =>
+      products.find((p) => p.id === selectedProductId) ||
+      null,
     [products, selectedProductId]
   );
 
@@ -189,14 +217,19 @@ export default function ProductCatalogPage() {
   }, [products, debouncedSearch]);
 
   const productVariants = useMemo(
-    () => variants.filter((v) => v.productId === selectedProductId) ?? [],
+    () =>
+      variants.filter(
+        (v) => v.productId === selectedProductId
+      ) ?? [],
     [variants, selectedProductId]
   );
 
   // ================== Handlers de producto ==================
 
-    // Helper: actualiza variantGroups y elimina duplicados (por nombre)
-  const updateVariantGroups = (updater: (prev: VariantGroup[]) => VariantGroup[]) => {
+  // Helper: actualiza variantGroups y elimina duplicados (por nombre)
+  const updateVariantGroups = (
+    updater: (prev: VariantGroup[]) => VariantGroup[]
+  ) => {
     setVariantGroups((prev) => {
       const next = updater(prev);
 
@@ -212,7 +245,6 @@ export default function ProductCatalogPage() {
     });
   };
 
-  
   const resetProductForm = () => {
     setSelectedProductId(null);
     setProductForm({
@@ -256,7 +288,8 @@ export default function ProductCatalogPage() {
     try {
       const payload: Omit<Product, "id"> = {
         name: productForm.name.trim(),
-        description: productForm.description.trim() || undefined,
+        description:
+          productForm.description.trim() || undefined,
         category: productForm.category.trim() || "",
         isActive: productForm.isActive,
       };
@@ -266,9 +299,14 @@ export default function ProductCatalogPage() {
 
       if (productForm.id) {
         // Update
-        saved = await apiClient.updateProduct(productForm.id, payload);
+        saved = await apiClient.updateProduct(
+          productForm.id,
+          payload
+        );
         setProducts((prev) =>
-          prev.map((p) => (p.id === saved.id ? saved : p))
+          prev.map((p) =>
+            p.id === saved.id ? saved : p
+          )
         );
       } else {
         // Create
@@ -282,14 +320,18 @@ export default function ProductCatalogPage() {
         const cat = payload.category.trim();
         if (!cat) return prev;
         if (prev.includes(cat)) return prev;
-        return [...prev, cat].sort((a, b) => a.localeCompare(b));
+        return [...prev, cat].sort((a, b) =>
+          a.localeCompare(b)
+        );
       });
 
       // Si es nuevo y NO tiene variantes, creamos una variante automática
       if (isNew && !productForm.hasVariants) {
         // Asegurar un grupo de variantes
         let group = variantGroups.find(
-          (g) => g.name.toLowerCase() === saved.name.toLowerCase()
+          (g) =>
+            g.name.toLowerCase() ===
+            saved.name.toLowerCase()
         );
         if (!group) {
           group = await apiClient.createVariantGroup({
@@ -297,11 +339,12 @@ export default function ProductCatalogPage() {
             description: `Grupo automático para ${saved.name}`,
           });
           // evitar duplicados
-          updateVariantGroups((prev) => [...prev, group]);
+          updateVariantGroups((prev) => [...prev, group!]);
         }
-        
+
         const autoSku =
-          productForm.autoSku.trim() || generateIdLikeSku(saved.name);
+          productForm.autoSku.trim() ||
+          generateIdLikeSku(saved.name);
 
         const newVariant: Omit<Variant, "id"> = {
           productId: saved.id,
@@ -310,18 +353,26 @@ export default function ProductCatalogPage() {
           name: saved.name,
           attributes: {}, // sin atributos
           unit: productForm.autoUnit || "UN",
-          barcode: productForm.autoBarcode.trim() || undefined,
+          barcode:
+            productForm.autoBarcode.trim() || undefined,
           isActive: true,
+          // Nota: agrega lastPurchaseCost a Variant si quieres costear también la variante auto
+          lastPurchaseCost: undefined as any,
         };
 
-        const created = await apiClient.createVariant(newVariant);
-        const vw = buildVariantWithProduct(created, [saved, ...products], [
-          ...variantGroups,
-          group,
-        ]);
+        const created = await apiClient.createVariant(
+          newVariant
+        );
+        const vw = buildVariantWithProduct(
+          created,
+          [saved, ...products],
+          [...variantGroups, group]
+        );
         if (vw) {
           setVariants((prev) =>
-            prev.some((v) => v.id === vw.id) ? prev : [...prev, vw]
+            prev.some((v) => v.id === vw.id)
+              ? prev
+              : [...prev, vw]
           );
         }
       }
@@ -337,11 +388,20 @@ export default function ProductCatalogPage() {
   };
 
   const handleDeleteProduct = async (p: Product) => {
-    if (!window.confirm(`¿Eliminar producto "${p.name}"?`)) return;
+    if (
+      !window.confirm(
+        `¿Eliminar producto "${p.name}"?`
+      )
+    )
+      return;
     try {
       await apiClient.deleteProduct(p.id);
-      setProducts((prev) => prev.filter((x) => x.id !== p.id));
-      setVariants((prev) => prev.filter((v) => v.productId !== p.id));
+      setProducts((prev) =>
+        prev.filter((x) => x.id !== p.id)
+      );
+      setVariants((prev) =>
+        prev.filter((v) => v.productId !== p.id)
+      );
       if (selectedProductId === p.id) {
         resetProductForm();
       }
@@ -362,10 +422,15 @@ export default function ProductCatalogPage() {
     try {
       setCategories((prev) => {
         if (prev.includes(name)) return prev;
-        return [...prev, name].sort((a, b) => a.localeCompare(b));
+        return [...prev, name].sort((a, b) =>
+          a.localeCompare(b)
+        );
       });
 
-      setProductForm((prev) => ({ ...prev, category: name }));
+      setProductForm((prev) => ({
+        ...prev,
+        category: name,
+      }));
       setNewCategoryName("");
       setIsCategoryDialogOpen(false);
     } finally {
@@ -373,7 +438,7 @@ export default function ProductCatalogPage() {
     }
   };
 
-  // ================== Variant groups (modal, más discreto) ==================
+  // ================== Variant groups ==================
 
   const handleCreateVariantGroup = async () => {
     const name = newGroupName.trim();
@@ -381,37 +446,46 @@ export default function ProductCatalogPage() {
 
     setIsSavingVariantGroup(true);
     try {
-        // Evitar duplicados por nombre ANTES de llamar al API
-        const existing = variantGroups.find(
-        (g) => g.name.trim().toLowerCase() === name.toLowerCase()
-        );
-        if (existing) {
-        setVariantForm((prev) => ({ ...prev, variantGroupId: existing.id }));
+      // Evitar duplicados por nombre ANTES de llamar al API
+      const existing = variantGroups.find(
+        (g) =>
+          g.name.trim().toLowerCase() ===
+          name.toLowerCase()
+      );
+      if (existing) {
+        setVariantForm((prev) => ({
+          ...prev,
+          variantGroupId: existing.id,
+        }));
         setIsVariantGroupDialogOpen(false);
         return;
-        }
+      }
 
-        const created = await apiClient.createVariantGroup({
-        name,
-        description: newGroupDesc.trim() || undefined,
+      const created =
+        await apiClient.createVariantGroup({
+          name,
+          description:
+            newGroupDesc.trim() || undefined,
         });
 
-        // Actualizar estado SIN duplicados
-        updateVariantGroups((prev) => [...prev, created]);
+      // Actualizar estado SIN duplicados
+      updateVariantGroups((prev) => [...prev, created]);
 
-        setVariantForm((prev) => ({ ...prev, variantGroupId: created.id }));
-        setIsVariantGroupDialogOpen(false);
-        toast.success("Grupo mayorista creado");
+      setVariantForm((prev) => ({
+        ...prev,
+        variantGroupId: created.id,
+      }));
+      setIsVariantGroupDialogOpen(false);
+      toast.success("Grupo mayorista creado");
     } catch (e) {
-        console.error(e);
-        toast.error("Error al crear grupo mayorista");
+      console.error(e);
+      toast.error("Error al crear grupo mayorista");
     } finally {
-        setIsSavingVariantGroup(false);
-        setNewGroupName("");
-        setNewGroupDesc("");
+      setIsSavingVariantGroup(false);
+      setNewGroupName("");
+      setNewGroupDesc("");
     }
-    };
-
+  };
 
   // ================== Variantes ==================
 
@@ -424,10 +498,13 @@ export default function ProductCatalogPage() {
       unit: "UN",
       attributes: "",
       variantGroupId: "",
+      cost: "",
     });
   };
 
   const handleSelectVariant = (v: VariantWithProduct) => {
+    const costRaw = (v as any)
+      .lastPurchaseCost as number | undefined;
     setVariantForm({
       id: v.id,
       sku: v.sku,
@@ -438,6 +515,10 @@ export default function ProductCatalogPage() {
         .map(([k, val]) => `${k}=${val}`)
         .join(", "),
       variantGroupId: v.variantGroupId,
+      cost:
+        typeof costRaw === "number"
+          ? String(costRaw)
+          : "",
     });
   };
 
@@ -446,12 +527,19 @@ export default function ProductCatalogPage() {
       toast.error("Seleccione un producto primero");
       return;
     }
-    if (!variantForm.sku.trim() || !variantForm.name.trim()) {
-      toast.error("SKU y nombre de variante son obligatorios");
+    if (
+      !variantForm.sku.trim() ||
+      !variantForm.name.trim()
+    ) {
+      toast.error(
+        "SKU y nombre de variante son obligatorios"
+      );
       return;
     }
     if (!variantForm.variantGroupId) {
-      toast.error("Debe seleccionar un producto base (grupo mayorista)");
+      toast.error(
+        "Debe seleccionar un producto base (grupo mayorista)"
+      );
       return;
     }
 
@@ -459,35 +547,61 @@ export default function ProductCatalogPage() {
     try {
       const attributes: Record<string, string> = {};
       if (variantForm.attributes.trim()) {
-        variantForm.attributes.split(",").forEach((pair) => {
-          const [k, v] = pair.split("=").map((s) => s.trim());
-          if (k && v) attributes[k] = v;
-        });
+        variantForm.attributes
+          .split(",")
+          .forEach((pair) => {
+            const [k, v] = pair
+              .split("=")
+              .map((s) => s.trim());
+            if (k && v) attributes[k] = v;
+          });
       }
 
+      const costNumber =
+        variantForm.cost.trim() !== ""
+          ? Number(variantForm.cost)
+          : undefined;
+
+      // Nota: agrega lastPurchaseCost a Variant en "@/types"
       const payload: Omit<Variant, "id"> = {
         productId: selectedProduct.id,
         variantGroupId: variantForm.variantGroupId,
         sku: variantForm.sku.trim(),
         name: variantForm.name.trim(),
-        barcode: variantForm.barcode.trim() || undefined,
+        barcode:
+          variantForm.barcode.trim() || undefined,
         unit: variantForm.unit || "UN",
         attributes,
         isActive: true,
+        lastPurchaseCost:
+          typeof costNumber === "number" &&
+          isFinite(costNumber) &&
+          costNumber > 0
+            ? (costNumber as any)
+            : undefined,
       };
 
       let saved: Variant;
       if (variantForm.id) {
-        saved = await apiClient.updateVariant(variantForm.id, payload);
+        saved = await apiClient.updateVariant(
+          variantForm.id,
+          payload
+        );
       } else {
         saved = await apiClient.createVariant(payload);
       }
 
-      const vw = buildVariantWithProduct(saved, products, variantGroups);
+      const vw = buildVariantWithProduct(
+        saved,
+        products,
+        variantGroups
+      );
       if (vw) {
         setVariants((prev) => {
           // Evitar duplicados
-          const existingIndex = prev.findIndex((v) => v.id === vw.id);
+          const existingIndex = prev.findIndex(
+            (x) => x.id === vw.id
+          );
           if (existingIndex >= 0) {
             const copy = [...prev];
             copy[existingIndex] = vw;
@@ -507,11 +621,20 @@ export default function ProductCatalogPage() {
     }
   };
 
-  const handleDeleteVariant = async (v: VariantWithProduct) => {
-    if (!window.confirm(`¿Eliminar variante "${v.name}"?`)) return;
+  const handleDeleteVariant = async (
+    v: VariantWithProduct
+  ) => {
+    if (
+      !window.confirm(
+        `¿Eliminar variante "${v.name}"?`
+      )
+    )
+      return;
     try {
       await apiClient.deleteVariant(v.id);
-      setVariants((prev) => prev.filter((x) => x.id !== v.id));
+      setVariants((prev) =>
+        prev.filter((x) => x.id !== v.id)
+      );
       if (variantForm.id === v.id) resetVariantForm();
       toast.success("Variante eliminada");
     } catch (e) {
@@ -526,10 +649,13 @@ export default function ProductCatalogPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <Package2 className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-semibold">Catálogo de productos</h1>
+        <h1 className="text-xl font-semibold">
+          Catálogo de productos
+        </h1>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        Administra productos, variantes y grupos mayoristas usados en el POS.
+        Administra productos, variantes y grupos mayoristas
+        usados en el POS.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
@@ -537,7 +663,9 @@ export default function ProductCatalogPage() {
         <Card className="h-[600px] flex flex-col">
           <CardHeader className="pb-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Productos</CardTitle>
+              <CardTitle className="text-base">
+                Productos
+              </CardTitle>
               <Button
                 size="sm"
                 className="h-8 px-3 whitespace-nowrap"
@@ -548,25 +676,32 @@ export default function ProductCatalogPage() {
               </Button>
             </div>
             <CardDescription className="text-xs">
-              {isLoading ? "Cargando..." : `${products.length} producto(s)`}
+              {isLoading
+                ? "Cargando..."
+                : `${products.length} producto(s)`}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col gap-3">
             <Input
               placeholder="Nombre, categoría..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
               className="h-9 text-sm"
             />
 
             <div className="flex-1 overflow-auto space-y-1">
               {filteredProducts.map((p) => {
-                const isActive = p.id === selectedProductId;
+                const isActive =
+                  p.id === selectedProductId;
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => handleSelectProduct(p)}
+                    onClick={() =>
+                      handleSelectProduct(p)
+                    }
                     className={cn(
                       "w-full flex items-center justify-between rounded-md px-3 py-2 text-left text-sm border transition-colors",
                       isActive
@@ -575,7 +710,9 @@ export default function ProductCatalogPage() {
                     )}
                   >
                     <div>
-                      <div className="font-medium truncate">{p.name}</div>
+                      <div className="font-medium truncate">
+                        {p.name}
+                      </div>
                       <div
                         className={cn(
                           "text-xs",
@@ -609,7 +746,8 @@ export default function ProductCatalogPage() {
                         variant="ghost"
                         className={cn(
                           "h-7 w-7 text-red-600 hover:text-red-700",
-                          isActive && "hover:bg-primary-foreground/10"
+                          isActive &&
+                            "hover:bg-primary-foreground/10"
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -623,11 +761,13 @@ export default function ProductCatalogPage() {
                 );
               })}
 
-              {!isLoading && filteredProducts.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center mt-4">
-                  No hay productos que coincidan con la búsqueda.
-                </p>
-              )}
+              {!isLoading &&
+                filteredProducts.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center mt-4">
+                    No hay productos que coincidan con la
+                    búsqueda.
+                  </p>
+                )}
             </div>
           </CardContent>
         </Card>
@@ -639,17 +779,21 @@ export default function ProductCatalogPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Package2 className="w-4 h-4 text-primary" />
-                {productForm.id ? "Editar producto" : "Nuevo producto"}
+                {productForm.id
+                  ? "Editar producto"
+                  : "Nuevo producto"}
               </CardTitle>
               <CardDescription className="text-xs">
-                Datos generales del producto. Para productos simples puedes
-                crear una variante automática.
+                Datos generales del producto. Para productos
+                simples puedes crear una variante automática.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">Nombre</label>
+                  <label className="text-xs font-medium">
+                    Nombre
+                  </label>
                   <Input
                     value={productForm.name}
                     onChange={(e) =>
@@ -668,7 +812,9 @@ export default function ProductCatalogPage() {
                   </label>
                   <div className="flex gap-2 items-end">
                     <Select
-                      value={productForm.category || ""}
+                      value={
+                        productForm.category || ""
+                      }
                       onValueChange={(value) =>
                         setProductForm((prev) => ({
                           ...prev,
@@ -705,7 +851,9 @@ export default function ProductCatalogPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium">Descripción</label>
+                <label className="text-xs font-medium">
+                  Descripción
+                </label>
                 <Textarea
                   rows={2}
                   value={productForm.description}
@@ -740,8 +888,13 @@ export default function ProductCatalogPage() {
                   </div>
                 </div>
 
-                <Button onClick={handleSaveProduct} disabled={isSavingProduct}>
-                  {isSavingProduct ? "Guardando..." : "Guardar producto"}
+                <Button
+                  onClick={handleSaveProduct}
+                  disabled={isSavingProduct}
+                >
+                  {isSavingProduct
+                    ? "Guardando..."
+                    : "Guardar producto"}
                 </Button>
               </div>
 
@@ -750,11 +903,14 @@ export default function ProductCatalogPage() {
                 <div className="mt-3 border-t pt-3 space-y-2">
                   <p className="text-xs font-medium flex items-center gap-1">
                     <Layers className="w-3 h-3" />
-                    Variante automática para productos simples
+                    Variante automática para productos
+                    simples
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <label className="text-xs">SKU</label>
+                      <label className="text-xs">
+                        SKU
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         placeholder="Opcional (se autogenera)"
@@ -768,7 +924,9 @@ export default function ProductCatalogPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs">Código de barras</label>
+                      <label className="text-xs">
+                        Código de barras
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         placeholder="Opcional"
@@ -776,13 +934,16 @@ export default function ProductCatalogPage() {
                         onChange={(e) =>
                           setProductForm((prev) => ({
                             ...prev,
-                            autoBarcode: e.target.value,
+                            autoBarcode:
+                              e.target.value,
                           }))
                         }
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs">Unidad</label>
+                      <label className="text-xs">
+                        Unidad
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         placeholder="UN"
@@ -797,8 +958,8 @@ export default function ProductCatalogPage() {
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Al crear el producto se generará una variante por defecto
-                    con estos datos.
+                    Al crear el producto se generará una
+                    variante por defecto con estos datos.
                   </p>
                 </div>
               )}
@@ -813,11 +974,12 @@ export default function ProductCatalogPage() {
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Layers className="w-4 h-4 text-primary" />
-                      Variantes de {selectedProduct.name}
+                      Variantes de{" "}
+                      {selectedProduct.name}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      SKU, código de barras, atributos y producto base
-                      mayorista.
+                      SKU, código de barras, atributos,
+                      producto base mayorista y costo.
                     </CardDescription>
                   </div>
                   <Button
@@ -836,73 +998,114 @@ export default function ProductCatalogPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/60">
-                        <TableHead className="text-xs">SKU</TableHead>
-                        <TableHead className="text-xs">Nombre</TableHead>
+                        <TableHead className="text-xs">
+                          SKU
+                        </TableHead>
+                        <TableHead className="text-xs">
+                          Nombre
+                        </TableHead>
                         <TableHead className="text-xs">
                           Producto base (grupo)
                         </TableHead>
                         <TableHead className="text-xs">
                           Código barras
                         </TableHead>
-                        <TableHead className="text-xs">Unidad</TableHead>
-                        <TableHead className="text-xs">Atributos</TableHead>
+                        <TableHead className="text-xs">
+                          Unidad
+                        </TableHead>
+                        <TableHead className="text-xs">
+                          Costo
+                        </TableHead>
+                        <TableHead className="text-xs">
+                          Atributos
+                        </TableHead>
                         <TableHead className="text-xs text-right">
                           Acciones
                         </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {productVariants.map((v) => (
-                        <TableRow key={v.id}>
-                          <TableCell className="text-xs font-mono">
-                            {v.sku}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {v.name}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {v.variantGroup.name}
-                          </TableCell>
-                          <TableCell className="text-xs font-mono">
-                            {v.barcode || "-"}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {v.unit}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {Object.entries(v.attributes || {})
-                              .map(([k, val]) => `${k}=${val}`)
-                              .join(", ")}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7"
-                                onClick={() => handleSelectVariant(v)}
-                              >
-                                <Edit2 className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-red-600 hover:text-red-700"
-                                onClick={() => handleDeleteVariant(v)}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {productVariants.map((v) => {
+                        const costRaw = (v as any)
+                          .lastPurchaseCost as
+                          | number
+                          | undefined;
+                        const cost =
+                          typeof costRaw === "number"
+                            ? costRaw
+                            : null;
+
+                        return (
+                          <TableRow key={v.id}>
+                            <TableCell className="text-xs font-mono">
+                              {v.sku}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {v.name}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {v.variantGroup.name}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">
+                              {v.barcode || "-"}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {v.unit}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">
+                              {cost != null
+                                ? formatCurrency(cost)
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {Object.entries(
+                                v.attributes || {}
+                              )
+                                .map(
+                                  ([k, val]) =>
+                                    `${k}=${val}`
+                                )
+                                .join(", ")}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  onClick={() =>
+                                    handleSelectVariant(
+                                      v
+                                    )
+                                  }
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-red-600 hover:text-red-700"
+                                  onClick={() =>
+                                    handleDeleteVariant(
+                                      v
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       {productVariants.length === 0 && (
                         <TableRow>
                           <TableCell
-                            colSpan={7}
+                            colSpan={8}
                             className="text-xs text-muted-foreground text-center py-4"
                           >
-                            No hay variantes para este producto.
+                            No hay variantes para este
+                            producto.
                           </TableCell>
                         </TableRow>
                       )}
@@ -914,7 +1117,9 @@ export default function ProductCatalogPage() {
                 <div className="border-t pt-3 mt-2 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium flex items-center gap-1">
-                      {variantForm.id ? "Editar variante" : "Nueva variante"}
+                      {variantForm.id
+                        ? "Editar variante"
+                        : "Nueva variante"}
                     </p>
                     {variantForm.id && (
                       <Button
@@ -930,7 +1135,9 @@ export default function ProductCatalogPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <label className="text-xs">SKU</label>
+                      <label className="text-xs">
+                        SKU
+                      </label>
                       <Input
                         className="h-8 text-xs font-mono"
                         value={variantForm.sku}
@@ -944,7 +1151,9 @@ export default function ProductCatalogPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs">Nombre variante</label>
+                      <label className="text-xs">
+                        Nombre variante
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         value={variantForm.name}
@@ -975,7 +1184,7 @@ export default function ProductCatalogPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                     <div className="space-y-1">
                       <label className="text-xs flex items-center gap-1">
                         <Layers className="w-3 h-3" />
@@ -983,7 +1192,9 @@ export default function ProductCatalogPage() {
                       </label>
                       <div className="flex items-end gap-2">
                         <Select
-                          value={variantForm.variantGroupId}
+                          value={
+                            variantForm.variantGroupId
+                          }
                           onValueChange={(value) =>
                             setVariantForm((prev) => ({
                               ...prev,
@@ -996,7 +1207,10 @@ export default function ProductCatalogPage() {
                           </SelectTrigger>
                           <SelectContent>
                             {variantGroups.map((g) => (
-                              <SelectItem key={g.id} value={g.id}>
+                              <SelectItem
+                                key={g.id}
+                                value={g.id}
+                              >
                                 {g.name}
                               </SelectItem>
                             ))}
@@ -1009,10 +1223,14 @@ export default function ProductCatalogPage() {
                           className="h-8 w-8"
                           onClick={() => {
                             setNewGroupName(
-                              selectedProduct ? selectedProduct.name : ""
+                              selectedProduct
+                                ? selectedProduct.name
+                                : ""
                             );
                             setNewGroupDesc("");
-                            setIsVariantGroupDialogOpen(true);
+                            setIsVariantGroupDialogOpen(
+                              true
+                            );
                           }}
                         >
                           <Plus className="w-3 h-3" />
@@ -1020,7 +1238,9 @@ export default function ProductCatalogPage() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs">Unidad</label>
+                      <label className="text-xs">
+                        Unidad
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         value={variantForm.unit}
@@ -1034,7 +1254,26 @@ export default function ProductCatalogPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs">Atributos</label>
+                      <label className="text-xs">
+                        Costo (última compra)
+                      </label>
+                      <Input
+                        className="h-8 text-xs text-right font-mono"
+                        type="number"
+                        value={variantForm.cost}
+                        onChange={(e) =>
+                          setVariantForm((prev) => ({
+                            ...prev,
+                            cost: e.target.value,
+                          }))
+                        }
+                        placeholder="Ej: 1200"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs">
+                        Atributos
+                      </label>
                       <Input
                         className="h-8 text-xs"
                         value={variantForm.attributes}
@@ -1075,19 +1314,24 @@ export default function ProductCatalogPage() {
           <DialogHeader>
             <DialogTitle>Nueva categoría</DialogTitle>
             <DialogDescription>
-              Crea una categoría para organizar tus productos (por ejemplo:
-              Abarrotes, Higiene Personal, Lácteos, etc.).
+              Crea una categoría para organizar tus
+              productos (por ejemplo: Abarrotes, Higiene
+              Personal, Lácteos, etc.).
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2 mt-2">
-            <Label htmlFor="category-name">Nombre de la categoría</Label>
+            <Label htmlFor="category-name">
+              Nombre de la categoría
+            </Label>
             <Input
               id="category-name"
               autoFocus
               placeholder="Ej: Higiene Personal"
               value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
+              onChange={(e) =>
+                setNewCategoryName(e.target.value)
+              }
             />
           </div>
 
@@ -1095,16 +1339,23 @@ export default function ProductCatalogPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsCategoryDialogOpen(false)}
+              onClick={() =>
+                setIsCategoryDialogOpen(false)
+              }
             >
               Cancelar
             </Button>
             <Button
               type="button"
-              disabled={!newCategoryName.trim() || isSavingCategory}
+              disabled={
+                !newCategoryName.trim() ||
+                isSavingCategory
+              }
               onClick={handleCreateCategory}
             >
-              {isSavingCategory ? "Guardando..." : "Guardar categoría"}
+              {isSavingCategory
+                ? "Guardando..."
+                : "Guardar categoría"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,31 +1368,42 @@ export default function ProductCatalogPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nuevo grupo mayorista</DialogTitle>
+            <DialogTitle>
+              Nuevo grupo mayorista
+            </DialogTitle>
             <DialogDescription>
-              Agrupa variantes que comparten el mismo producto base
-              mayorista (por ejemplo: Desodorante Spray 150ml).
+              Agrupa variantes que comparten el mismo
+              producto base mayorista (por ejemplo:
+              Desodorante Spray 150ml).
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 mt-2">
             <div className="space-y-1">
-              <Label htmlFor="group-name">Nombre del grupo</Label>
+              <Label htmlFor="group-name">
+                Nombre del grupo
+              </Label>
               <Input
                 id="group-name"
                 autoFocus
                 placeholder="Ej: Desodorante Spray 150ml"
                 value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
+                onChange={(e) =>
+                  setNewGroupName(e.target.value)
+                }
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="group-desc">Descripción (opcional)</Label>
+              <Label htmlFor="group-desc">
+                Descripción (opcional)
+              </Label>
               <Input
                 id="group-desc"
                 placeholder="Opcional"
                 value={newGroupDesc}
-                onChange={(e) => setNewGroupDesc(e.target.value)}
+                onChange={(e) =>
+                  setNewGroupDesc(e.target.value)
+                }
               />
             </div>
           </div>
@@ -1150,16 +1412,23 @@ export default function ProductCatalogPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsVariantGroupDialogOpen(false)}
+              onClick={() =>
+                setIsVariantGroupDialogOpen(false)
+              }
             >
               Cancelar
             </Button>
             <Button
               type="button"
-              disabled={!newGroupName.trim() || isSavingVariantGroup}
+              disabled={
+                !newGroupName.trim() ||
+                isSavingVariantGroup
+              }
               onClick={handleCreateVariantGroup}
             >
-              {isSavingVariantGroup ? "Guardando..." : "Guardar grupo"}
+              {isSavingVariantGroup
+                ? "Guardando..."
+                : "Guardar grupo"}
             </Button>
           </DialogFooter>
         </DialogContent>

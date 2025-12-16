@@ -102,7 +102,10 @@ export interface ApiClient {
   getInventoryMovements(branchId: string): Promise<InventoryMovement[]>;
   getInventoryLines(movementId: string): Promise<InventoryLine[]>;
   createAdjustment(branchId: string, variantId: string, quantity: number, notes: string): Promise<InventoryMovement>;
-  
+  getStockByVariant(variantId: string): Promise<{branchId: string;branchName: string;quantity: number;}[]>;
+
+
+
   // Customers
   getCustomers(): Promise<Customer[]>;
   createCustomer(customer: Omit<Customer, 'id'>): Promise<Customer>;

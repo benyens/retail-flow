@@ -1,3 +1,4 @@
+// src/modules/admin/pages/PriceManagementPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/api";
 import { useApp } from "@/state/AppContext";
@@ -33,12 +34,19 @@ export default function PriceManagementPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
-  const [priceListId, setPriceListId] = useState<string>("pl-1"); // pl-1: normal, pl-2: mayorista
+  const [priceListId, setPriceListId] =
+    useState<string>("pl-1"); // pl-1: normal, pl-2: mayorista
 
   // selección y edición
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [rowDrafts, setRowDrafts] = useState<Record<string, string>>({});
-  const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [rowDrafts, setRowDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [savingRowId, setSavingRowId] = useState<string | null>(
+    null
+  );
 
   // bulk
   const [bulkOperation, setBulkOperation] =
@@ -90,9 +98,13 @@ export default function PriceManagementPage() {
     [variants]
   );
 
-  const getPriceForVariant = (variantId: string): VariantPrice | undefined =>
+  const getPriceForVariant = (
+    variantId: string
+  ): VariantPrice | undefined =>
     prices.find(
-      (p) => p.variantId === variantId && p.priceListId === priceListId
+      (p) =>
+        p.variantId === variantId &&
+        p.priceListId === priceListId
     );
 
   const filteredVariants = useMemo(() => {
@@ -259,15 +271,15 @@ export default function PriceManagementPage() {
           <p className="text-xs text-muted-foreground">
             Aquí puedes administrar los precios{" "}
             <span className="font-semibold">normales</span> y{" "}
-            <span className="font-semibold">mayoristas</span> por variante.
-            Los precios mayoristas se combinan con los tramos configurados en
-            la sección “Mayorista”.
+            <span className="font-semibold">mayoristas</span> por
+            variante. Los precios mayoristas se combinan con los
+            tramos configurados en la sección “Mayorista”.
           </p>
 
           {selectedBranch && (
             <p className="text-xs text-muted-foreground">
-              Los precios son globales para la empresa, pero el stock se
-              maneja por sucursal.
+              Los precios son globales para la empresa, pero el stock
+              se maneja por sucursal.
             </p>
           )}
 
@@ -434,6 +446,9 @@ export default function PriceManagementPage() {
                       Producto base mayorista
                     </th>
                     <th className="px-3 py-2 text-right">
+                      Costo (última compra)
+                    </th>
+                    <th className="px-3 py-2 text-right">
                       Precio actual
                     </th>
                     <th className="px-3 py-2 text-right">
@@ -446,12 +461,39 @@ export default function PriceManagementPage() {
                   {filteredVariants.map((v) => {
                     const price = getPriceForVariant(v.id);
                     const draft = rowDrafts[v.id];
+                    const baseValue =
+                      draft !== undefined && draft !== ""
+                        ? Number(draft)
+                        : price?.price ?? 0;
+
+                    // Nota: agrega lastPurchaseCost a Variant/VariantWithProduct
+                    const costRaw = (v as any)
+                      .lastPurchaseCost as number | undefined;
+                    const cost =
+                      typeof costRaw === "number" &&
+                      costRaw > 0
+                        ? costRaw
+                        : null;
+
+                    let marginAmount: number | null = null;
+                    let marginPercent: number | null = null;
+                    if (
+                      cost != null &&
+                      baseValue &&
+                      baseValue > 0
+                    ) {
+                      marginAmount = baseValue - cost;
+                      marginPercent =
+                        (marginAmount / baseValue) * 100;
+                    }
+
                     const inputValue =
                       draft !== undefined
                         ? draft
                         : price?.price
                         ? String(price.price)
                         : "";
+
                     return (
                       <tr
                         key={v.id}
@@ -486,6 +528,11 @@ export default function PriceManagementPage() {
                           {v.variantGroup.name}
                         </td>
                         <td className="px-3 py-2 align-top text-right font-mono">
+                          {cost != null
+                            ? formatCurrency(cost)
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2 align-top text-right font-mono">
                           {price
                             ? formatCurrency(price.price)
                             : "—"}
@@ -505,6 +552,14 @@ export default function PriceManagementPage() {
                               price ? String(price.price) : "0"
                             }
                           />
+                          {marginAmount != null &&
+                            marginPercent != null && (
+                              <div className="mt-1 text-[11px] text-muted-foreground">
+                                Margen:{" "}
+                                {formatCurrency(marginAmount)}{" "}
+                                ({marginPercent.toFixed(1)}%)
+                              </div>
+                            )}
                         </td>
                         <td className="px-3 py-2 align-top text-right">
                           <Button
