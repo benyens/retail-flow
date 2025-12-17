@@ -178,7 +178,7 @@ export default function POSPage() {
     (async () => {
       try {
         const [v, t, vp, st, cs, emps] = await Promise.all([
-          apiClient.getVariants(),
+          apiClient.getVariants(selectedCashRegister.branchId),
           apiClient.getWholesaleTiers(),
           apiClient.getVariantPrices(),
           apiClient.getStock(selectedCashRegister.branchId),

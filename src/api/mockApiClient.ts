@@ -4,9 +4,7 @@ import {
   BRANCHES,
   CASH_REGISTERS,
   USERS,
-  getVariantWithProduct,
   getAllVariantsWithProducts,
-  getVariantPrice,
 } from './mockData';
 import { generateId } from '@/utils/format';
 import type {
@@ -34,6 +32,7 @@ import type {
   Customer,
   Supplier,
   PurchaseInvoice,
+  PurchaseLine,
   Employee,
   EmployeeAdvance,
   User,
@@ -44,16 +43,51 @@ import type {
   PaymentMethod,
   RefType,
   ProductCategory,
+  QuickProductPayload,
 } from '@/types';
 
 // Simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+function generateAutoSku(productName: string, variantName?: string): string {
+  const clean = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const baseProd = clean(productName).slice(0, 8) || "PROD";
+  const baseVar = variantName ? clean(variantName).slice(0, 4) : "";
+  const base = baseVar ? `${baseProd}-${baseVar}` : baseProd;
+
+  const existing = new Set(
+    mockState.variants
+      .map((v) => v.sku)
+      .filter((s): s is string => !!s)
+  );
+
+  let n = 1;
+  let candidate = `${base}-${String(n).padStart(3, "0")}`;
+  while (existing.has(candidate)) {
+    n++;
+    candidate = `${base}-${String(n).padStart(3, "0")}`;
+  }
+  return candidate;
+}
+
+
 export class MockApiClient implements ApiClient {
   
-  updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
-    throw new Error('Method not implemented.');
+  async updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
+    await delay(300);
+    const index = mockState.customers.findIndex(c => c.id === id);
+    if (index === -1) throw new Error('Cliente no encontrado');
+    mockState.customers[index] = { ...mockState.customers[index], ...customer };
+    return mockState.customers[index];
   }
+
   private currentUserId: string | null = null;
 
   // ============ Auth ============
@@ -258,6 +292,138 @@ export class MockApiClient implements ApiClient {
     mockState.products.splice(index, 1);
   }
 
+  /** Genera un SKU único basado en el nombre del producto + un contador */
+  private generateUniqueSku(baseName: string): string {
+    const base =
+      baseName
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')   // solo letras/números con guiones
+        .replace(/^-+|-+$/g, '')       // quita guiones al inicio/fin
+        .slice(0, 10) || 'SKU';
+
+    const existing = new Set(mockState.variants.map(v => v.sku));
+    let i = 1;
+    // SKU tipo: COCA-COLA-001, COCA-COLA-002, ...
+    let candidate = `${base}-${String(i).padStart(3, '0')}`;
+    while (existing.has(candidate)) {
+      i += 1;
+      candidate = `${base}-${String(i).padStart(3, '0')}`;
+    }
+    return candidate;
+  }
+
+  // ------- NUEVO PRODUCTO RÁPIDO --------
+  async createQuickProduct(payload: QuickProductPayload): Promise<VariantWithProduct> {
+    await delay(300);
+
+    // ---- Validaciones base ----
+    const mode = payload.mode;
+    const variantName = (payload.variantName ?? "").trim() || "Única";
+    const unit = payload.unit?.trim() || "UN";
+
+    const salePrice =
+      typeof payload.salePrice === "number" ? payload.salePrice : Number(payload.salePrice);
+
+    if (!salePrice || salePrice <= 0) {
+      throw new Error("Precio de venta (lista normal) es obligatorio para que el producto aparezca en POS/Precios.");
+    }
+
+    const lastPurchaseCost =
+      typeof payload.lastPurchaseCost === "number"
+        ? payload.lastPurchaseCost
+        : payload.lastPurchaseCost != null
+        ? Number(payload.lastPurchaseCost)
+        : undefined;
+
+    // ---- Resolver Product + VariantGroup según modo ----
+    let product: Product | null = null;
+
+    if (mode === "ADD_VARIANT") {
+      const pid = payload.existingProductId?.trim();
+      if (!pid) throw new Error("Debes seleccionar un producto existente para agregar una variante.");
+
+      product = mockState.products.find(p => p.id === pid) ?? null;
+      if (!product) throw new Error("Producto existente no encontrado.");
+    } else {
+      const productName = (payload.productName ?? "").trim();
+      if (!productName) throw new Error("Nombre de producto es obligatorio.");
+
+      // Crear Product (mínimo y consistente con tu interface)
+      product = {
+        id: generateId(),
+        name: productName,
+        description: "",
+        category: "Sin categoría",
+        isActive: true,
+      };
+      mockState.products.push(product);
+    }
+
+    // Asegurar un VariantGroup coherente (1:1 por nombre del producto, para mayorista)
+    let variantGroup = mockState.variantGroups.find(
+      g => g.name.trim().toLowerCase() === product!.name.trim().toLowerCase()
+    );
+
+    if (!variantGroup) {
+      variantGroup = {
+        id: generateId(),
+        name: product!.name.trim(),
+        description: `Grupo para ${product!.name}`,
+      };
+      mockState.variantGroups.push(variantGroup);
+    }
+
+    // SKU
+    const sku = payload.sku?.trim() || generateAutoSku(product!.name, variantName);
+    const barcode = payload.barcode?.trim() || undefined;
+
+    // Crear Variant
+    const variant: Variant = {
+      id: generateId(),
+      productId: product!.id,
+      variantGroupId: variantGroup.id,
+      name: variantName,
+      sku,
+      barcode,
+      unit,
+      attributes: {},
+      isActive: true,
+      lastPurchaseCost: typeof lastPurchaseCost === "number" ? lastPurchaseCost : null,
+      lastPurchaseDate: typeof lastPurchaseCost === "number" ? new Date().toISOString() : null,
+    } as Variant;
+
+    mockState.variants.push(variant);
+
+    // ✅ Crear SIEMPRE precio lista normal "pl-1"
+    const normalListId = "pl-1";
+    const existingPrice = mockState.variantPrices.find(
+      vp => vp.variantId === variant.id && vp.priceListId === normalListId
+    );
+
+    if (existingPrice) {
+      existingPrice.price = salePrice;
+    } else {
+      mockState.variantPrices.push({
+        id: generateId(),
+        variantId: variant.id,
+        priceListId: normalListId,
+        price: salePrice,
+      } as VariantPrice);
+    }
+
+    // Devolver VariantWithProduct consistente
+    const full: VariantWithProduct = {
+      ...variant,
+      product: product!,
+      variantGroup,
+    } as VariantWithProduct;
+
+    return full;
+  }
+
+
+  // ---------- VARIANTES ----------
+
   async getVariantGroups(): Promise<VariantGroup[]> {
     await delay(200);
     return mockState.variantGroups;
@@ -285,9 +451,17 @@ export class MockApiClient implements ApiClient {
     mockState.variantGroups.splice(index, 1);
   }
 
-  async getVariants(): Promise<VariantWithProduct[]> {
+  async getVariants(branchId?: string): Promise<VariantWithProduct[]> {
     await delay(200);
-    return getAllVariantsWithProducts();
+    const all = getAllVariantsWithProducts(); // tu fuente actual
+    
+  if (!branchId) return all;
+
+  return all.filter(v => {
+    const allowed = v.product.allowedBranchIds;
+    if (!allowed || allowed.length === 0) return true;
+    return allowed.includes(branchId);
+  });
   }
 
   async createVariant(variant: Omit<Variant, 'id'>): Promise<Variant> {
@@ -835,6 +1009,8 @@ export class MockApiClient implements ApiClient {
     branchId: string,
     supplierId: string,
     invoiceNumber: string,
+    invoiceDate: string,
+    notes: string,
     lines: { variantId: string; quantity: number; unitCost: number }[]
   ): Promise<PurchaseInvoice> {
     await delay(400);
@@ -843,17 +1019,32 @@ export class MockApiClient implements ApiClient {
     const tax = Math.round(subtotal * 0.19);
     const total = subtotal + tax;
 
+    const now = new Date().toISOString();
+
     const invoice: PurchaseInvoice = {
       id: generateId(),
       branchId,
       supplierId,
       invoiceNumber,
+
+      // ✅ NUEVO
+      invoiceDate: invoiceDate || now.slice(0, 10),
+      notes: notes?.trim() || "",
+
       subtotal,
       tax,
       total,
-      createdAt: new Date().toISOString(),
-      createdBy: this.currentUserId || 'user-1',
+
+      // ✅ NUEVO
+      status: "DRAFT",
+      siiTrackId: null,
+      lastError: null,
+      updatedAt: now,
+
+      createdAt: now,
+      createdBy: this.currentUserId || "user-1",
     };
+
     mockState.purchaseInvoices.push(invoice);
 
     // Add lines and update stock
@@ -872,38 +1063,76 @@ export class MockApiClient implements ApiClient {
       );
       if (stockItem) {
         stockItem.quantity += line.quantity;
-        stockItem.lastUpdated = new Date().toISOString();
+        stockItem.lastUpdated = now;
       } else {
         mockState.stock.push({
           branchId,
           variantId: line.variantId,
           quantity: line.quantity,
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: now,
         });
       }
 
-      // 👇 AQUÍ: actualizar lastPurchaseCost de la variante
+      // actualizar lastPurchaseCost
       const variant = mockState.variants.find(v => v.id === line.variantId);
       if (variant) {
         (variant as Variant).lastPurchaseCost = line.unitCost;
-        (variant as any).lastPurchaseDate = new Date().toISOString();
+        (variant as any).lastPurchaseDate = now;
       }
     }
 
-  // Create inventory movement
-  const movement: InventoryMovement = {
-    id: generateId(),
-    branchId,
-    type: 'PURCHASE',
-    referenceId: invoice.id,
-    referenceType: 'purchase_invoice',
-    createdAt: new Date().toISOString(),
-    createdBy: this.currentUserId || 'user-1',
-  };
-  mockState.inventoryMovements.push(movement);
+    // Inventory movement
+    const movement: InventoryMovement = {
+      id: generateId(),
+      branchId,
+      type: "PURCHASE",
+      referenceId: invoice.id,
+      referenceType: "purchase_invoice",
+      createdAt: now,
+      createdBy: this.currentUserId || "user-1",
+    };
+    mockState.inventoryMovements.push(movement);
 
-  return invoice;
-}
+    return invoice;
+  }
+
+
+  async getPurchaseLines(
+    purchaseInvoiceId: string
+  ): Promise<PurchaseLine[]> {
+    await delay(200);
+    return mockState.purchaseLines.filter(
+      (l) => l.purchaseInvoiceId === purchaseInvoiceId
+    );
+  }
+
+  async updatePurchaseInvoice(id: string, patch: Partial<PurchaseInvoice>) {
+    await delay(300);
+
+    const inv = mockState.purchaseInvoices.find((x: PurchaseInvoice) => x.id === id);
+    if (!inv) throw new Error("Factura no encontrada");
+
+    if (inv.status !== "DRAFT") {
+      throw new Error("Esta factura ya fue enviada al SII y no se puede editar.");
+    }
+
+    Object.assign(inv, patch, { updatedAt: new Date().toISOString() });
+    return inv;
+  }
+
+  async sendPurchaseInvoiceToSII(id: string) {
+    await delay(600);
+
+    const inv = mockState.purchaseInvoices.find((x: PurchaseInvoice) => x.id === id);
+    if (!inv) throw new Error("Factura no encontrada");
+
+    if (inv.status !== "DRAFT") return inv;
+
+    inv.status = "SII_SENT";
+    inv.siiTrackId = `trk-${Date.now()}`;
+    inv.updatedAt = new Date().toISOString();
+    return inv;
+  }
 
 
   // ============ Employees ============
@@ -969,7 +1198,7 @@ export class MockApiClient implements ApiClient {
       return d.branchId === branchId && created >= startOfDay && created <= endOfDay;
     });
 
-    const byPaymentMethod: Record<PaymentMethod, number> = { CASH: 0, CARD: 0, TRANSFER: 0, OTHER: 0 };
+    const byPaymentMethod: Record<PaymentMethod, number> = { CASH: 0, CARD: 0, TRANSFER: 0, CHECK: 0, OTHER: 0 };
     const byDocType: Record<DocumentType, number> = { BOLETA: 0, FACTURA: 0, CREDIT_NOTE: 0 };
 
     for (const sale of sales) {
@@ -1002,3 +1231,4 @@ export class MockApiClient implements ApiClient {
 
 // Export singleton instance
 export const mockApiClient = new MockApiClient();
+

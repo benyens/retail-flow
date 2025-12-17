@@ -120,6 +120,7 @@ export interface Product {
   description?: string;
   category: string;
   isActive: boolean;
+  allowedBranchIds?: string[] | null;
 } 
 
 export interface ProductCategory {
@@ -154,6 +155,31 @@ export interface VariantWithProduct extends Variant {
   product: Product;
   variantGroup: VariantGroup;
 }
+
+
+export type QuickProductMode = "NEW_PRODUCT" | "ADD_VARIANT";
+
+export type QuickProductPayload = {
+  mode: QuickProductMode;
+
+  // NEW_PRODUCT
+  productName?: string;         // requerido si mode=NEW_PRODUCT
+
+  // ADD_VARIANT
+  existingProductId?: string;   // requerido si mode=ADD_VARIANT
+
+  // Ambos
+  variantName?: string;         // default: "Única"
+  sku?: string;
+  barcode?: string;
+  salePrice: number;            // ✅ obligatorio (lista normal)
+  lastPurchaseCost?: number;
+  unit?: string;                // "UN", "KG", etc.
+  categoryId?: string | null;
+};
+
+
+
 
 // ============ Pricing ============
 
@@ -332,19 +358,36 @@ export interface Supplier {
   phone?: string;
   address?: string;
   isActive: boolean;
+  businessLine?: string;
 }
+
+export type PurchaseInvoiceStatus = "DRAFT" | "SII_SENT" | "SII_ACCEPTED" | "SII_REJECTED";
 
 export interface PurchaseInvoice {
   id: string;
   branchId: string;
   supplierId: string;
   invoiceNumber: string;
+
+  // ✅ NUEVO
+  invoiceDate: string;        // "YYYY-MM-DD"
+  notes?: string;
+
   subtotal: number;
   tax: number;
   total: number;
+
+  // ✅ NUEVO (para editar antes de enviar a SII)
+  status: PurchaseInvoiceStatus;
+  siiTrackId?: string | null;
+  lastError?: string | null;
+  updatedAt: string;
+
   createdAt: string;
   createdBy: string;
 }
+
+
 
 export interface PurchaseLine {
   id: string;
@@ -354,6 +397,7 @@ export interface PurchaseLine {
   unitCost: number;
   subtotal: number;
 }
+
 
 // ============ Audit ============
 

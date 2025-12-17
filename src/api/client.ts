@@ -34,6 +34,7 @@ import type {
   PaymentMethod,
   RefType,
   ProductCategory,
+  QuickProductPayload,
 } from '@/types';
 
 // ============ API Client Interface ============
@@ -69,13 +70,14 @@ export interface ApiClient {
   createProduct(product: Omit<Product, 'id'>): Promise<Product>;
   updateProduct(id: string, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: string): Promise<void>;
+  createQuickProduct(payload: QuickProductPayload): Promise<VariantWithProduct>;
   
   getVariantGroups(): Promise<VariantGroup[]>;
   createVariantGroup(group: Omit<VariantGroup, 'id'>): Promise<VariantGroup>;
   updateVariantGroup(id: string, group: Partial<VariantGroup>): Promise<VariantGroup>;
   deleteVariantGroup(id: string): Promise<void>;
   
-  getVariants(): Promise<VariantWithProduct[]>;
+  getVariants(branchId?: string): Promise<VariantWithProduct[]>;
   createVariant(variant: Omit<Variant, 'id'>): Promise<Variant>;
   updateVariant(id: string, variant: Partial<Variant>): Promise<Variant>;
   deleteVariant(id: string): Promise<void>;
@@ -145,9 +147,21 @@ export interface ApiClient {
     branchId: string,
     supplierId: string,
     invoiceNumber: string,
+    invoiceDate: string,
+    notes: string,
     lines: { variantId: string; quantity: number; unitCost: number }[]
   ): Promise<PurchaseInvoice>;
-  
+
+
+  updatePurchaseInvoice(
+    id: string,
+    patch: Partial<PurchaseInvoice>
+  ): Promise<PurchaseInvoice>;
+
+  sendPurchaseInvoiceToSII(id: string): Promise<PurchaseInvoice>;
+
+  getPurchaseLines(purchaseInvoiceId: string): Promise<PurchaseLine[]>;
+
   // Employees
   getEmployees(branchId: string): Promise<Employee[]>;
   createEmployee(employee: Omit<Employee, 'id'>): Promise<Employee>;
