@@ -70,11 +70,11 @@ export default function LoginPage() {
               {isLoading ? 'Ingresando...' : 'Ingresar'}
             </Button>
           </form>
-          <div className="mt-6 p-4 bg-muted rounded-lg">
+          {import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true' && <div className="mt-6 p-4 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground mb-2">Credenciales de prueba:</p>
             <p className="text-xs font-mono">Admin: admin@pos.cl / admin123</p>
             <p className="text-xs font-mono">Cajero: cajero@pos.cl / cajero123</p>
-          </div>
+          </div>}
         </CardContent>
       </Card>
     </div>

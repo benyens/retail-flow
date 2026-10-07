@@ -40,9 +40,8 @@ const adminLinks = [
   { to: '/admin/catalogo', icon: Package, label: 'Catálogo' },
   { to: '/admin/precios', icon: DollarSign, label: 'Precios' },
   { to: '/admin/mayorista', icon: Tags, label: 'Mayorista' },
-  { to: '/admin/ingresar-factura', icon: Receipt, label: 'Ingresar Factura' },
+  { to: '/admin/facturas', icon: Receipt, label: 'Facturas' },
   { to: '/admin/stock', icon: Boxes, label: 'Stock' },
-  { to: '/admin/purchases', icon: Truck, label: 'Compras' },
   { to: '/admin/employees', icon: Users, label: 'Empleados' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reportes' },
   { to: '/admin/audit', icon: Shield, label: 'Auditoría' },
@@ -125,7 +124,7 @@ export default function Sidebar() {
               Administración
             </p>
             <div className="space-y-1">
-              {adminLinks.map(link => (
+              {adminLinks.filter(link => auth.user?.role === "ADMIN" || !["/admin/users", "/admin/audit"].includes(link.to)).map(link => (
                 <NavLink
                   key={link.to}
                   to={link.to}

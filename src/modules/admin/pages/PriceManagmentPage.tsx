@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 // src/modules/admin/pages/PriceManagementPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/api";
@@ -35,7 +36,8 @@ export default function PriceManagementPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [priceListId, setPriceListId] =
-    useState<string>("pl-1"); // pl-1: normal, pl-2: mayorista
+    useState<string>("");
+  const [priceLists, setPriceLists] = useState<import("@/types").PriceList[]>([]);
 
   // selección y edición
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -44,6 +46,7 @@ export default function PriceManagementPage() {
   const [rowDrafts, setRowDrafts] = useState<
     Record<string, string>
   >({});
+  useUnsavedChanges(Object.keys(rowDrafts).length > 0);
   const [savingRowId, setSavingRowId] = useState<string | null>(
     null
   );
@@ -58,12 +61,15 @@ export default function PriceManagementPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [vs, ps] = await Promise.all([
+        const [vs, ps, lists] = await Promise.all([
           apiClient.getVariants(),
           apiClient.getVariantPrices(),
+          apiClient.getPriceLists(),
         ]);
         setVariants(vs);
         setPrices(ps);
+        setPriceLists(lists);
+        setPriceListId(lists.find(l => l.type === "NORMAL")?.id ?? "");
       } catch (err) {
         console.error(err);
         toast.error("Error al cargar catálogo y precios");
@@ -156,6 +162,7 @@ export default function PriceManagementPage() {
   };
 
   const handleSaveRow = async (variantId: string) => {
+    if (savingRowId || savingBulk || !priceListId) return;
     const draft = rowDrafts[variantId];
     const current = getPriceForVariant(variantId);
     const baseValue =
@@ -290,7 +297,7 @@ export default function PriceManagementPage() {
                 Buscar
               </label>
               <Input
-                placeholder="Buscar por SKU, nombre, código de barras..."
+                data-search-focus aria-label="Buscar por SKU, nombre, código de barras..." placeholder="Buscar por SKU, nombre, código de barras..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -349,14 +356,13 @@ export default function PriceManagementPage() {
               </span>
               <Select
                 value={priceListId}
-                onValueChange={setPriceListId}
+                onValueChange={id => { if (Object.keys(rowDrafts).length && !window.confirm("¿Descartar precios sin guardar?")) return; setRowDrafts({}); setPriceListId(id); }}
               >
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pl-1">Normal</SelectItem>
-                  <SelectItem value="pl-2">Mayorista</SelectItem>
+                  {priceLists.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -540,7 +546,9 @@ export default function PriceManagementPage() {
                         <td className="px-3 py-2 align-top text-right">
                           <Input
                             type="number"
-                            value={inputValue}
+                            aria-label={`Precio de ${v.product.name} ${v.name}`}
+                              onKeyDown={e => { if (e.key === "Enter" && !e.repeat) { e.preventDefault(); handleSaveRow(v.id); } }}
+                              value={inputValue}
                             onChange={(e) =>
                               setRowDrafts((prev) => ({
                                 ...prev,

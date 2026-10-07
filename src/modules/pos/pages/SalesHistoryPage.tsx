@@ -35,7 +35,8 @@ interface SalesHistoryPageProps {
 }
 
 export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPageProps) {
-  const { selectedCashRegister } = useApp();
+  const { selectedCashRegister, auth } = useApp();
+  const canManageSales = auth.user?.role === "ADMIN" || auth.user?.role === "MANAGER";
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
@@ -284,7 +285,7 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
                             onClick={() => setCreditNoteSaleId(doc.id)}
                             disabled={
                               doc.status !== "ISSUED" ||
-                              doc.docType === "CREDIT_NOTE"
+                              doc.docType === "CREDIT_NOTE" || !canManageSales
                             }
                           >
                             Nota cr.
@@ -294,7 +295,7 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
                             size="sm"
                             className="h-7 px-2 text-[10px]"
                             onClick={() => handleOpenVoid(doc)}
-                            disabled={doc.status !== "ISSUED"}
+                            disabled={!canManageSales || doc.status !== "ISSUED" || doc.docType === "CREDIT_NOTE"}
                           >
                             Anular
                           </Button>

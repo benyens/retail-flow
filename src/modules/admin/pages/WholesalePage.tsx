@@ -31,6 +31,7 @@ export default function WholesalePage() {
   const [groups, setGroups] = useState<VariantGroup[]>([]);
   const [tiers, setTiers] = useState<WholesaleTier[]>([]);
   const [variants, setVariants] = useState<VariantWithProduct[]>([]);
+  const [wholesaleListId, setWholesaleListId] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -54,11 +55,13 @@ export default function WholesalePage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [gs, ts, vs] = await Promise.all([
+        const [gs, ts, vs, lists] = await Promise.all([
           apiClient.getVariantGroups(),
           apiClient.getWholesaleTiers(),
           apiClient.getVariants(),
+          apiClient.getPriceLists(),
         ]);
+        setWholesaleListId(lists.find(l => l.type === "MAYORISTA")?.id ?? "");
         setGroups(gs);
         updateTiers(() => ts);
         setVariants(vs);
@@ -167,7 +170,7 @@ export default function WholesalePage() {
       if (mode === "new") {
         const newTier = await apiClient.createWholesaleTier({
           variantGroupId: currentGroup.id,
-          priceListId: "pl-2", // lista mayorista mock
+          priceListId: wholesaleListId, // lista mayorista mock
           minQty: qty,
           unitPrice: price,
         });
@@ -507,6 +510,7 @@ export default function WholesalePage() {
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { toast.error("El archivo debe pesar como máximo 5 MB"); return; }
                 try {
                   const data = await file.arrayBuffer();
                   const workbook = XLSX.read(data, { type: "array" });
@@ -550,7 +554,7 @@ export default function WholesalePage() {
 
                     const created = await apiClient.createWholesaleTier({
                       variantGroupId: group.id,
-                      priceListId: "pl-2",
+                      priceListId: wholesaleListId,
                       minQty,
                       unitPrice,
                     });

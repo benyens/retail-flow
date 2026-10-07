@@ -4,6 +4,7 @@ import {
   BRANCHES,
   CASH_REGISTERS,
   USERS,
+  PRICE_LISTS,
   getAllVariantsWithProducts,
 } from './mockData';
 import { generateId } from '@/utils/format';
@@ -79,6 +80,25 @@ function generateAutoSku(productName: string, variantName?: string): string {
 
 
 export class MockApiClient implements ApiClient {
+  async getPriceLists() { return [...PRICE_LISTS]; }
+  async getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport> {
+    const documents = mockState.salesDocuments.filter(d => {
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d.createdAt));
+      const c = mockState.customers.find(c => c.id === d.customerId);
+      return d.branchId === branchId && day >= filters.from && day <= filters.to &&
+        (!filters.docType || d.docType === filters.docType) && (!filters.status || d.status === filters.status) &&
+        (!filters.query || `${d.folio} ${c?.name} ${c?.rut}`.toLowerCase().includes(filters.query.toLowerCase()));
+    }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    let grossSales = 0, refunds = 0, transactions = 0;
+    const byPaymentMethod = { CASH: 0, CARD: 0, TRANSFER: 0, CHECK: 0, OTHER: 0 };
+    for (const d of documents) {
+      if (d.status !== 'ISSUED') continue;
+      const sign = d.docType === 'CREDIT_NOTE' ? -1 : 1;
+      if (sign < 0) refunds += d.total; else { grossSales += d.total; transactions++; }
+      for (const p of mockState.payments.filter(p => p.salesDocumentId === d.id)) byPaymentMethod[p.method] += sign * p.amount;
+    }
+    return { documents, grossSales, refunds, netSales: grossSales - refunds, transactions, byPaymentMethod };
+  }
   
   async updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
     await delay(300);
@@ -1186,49 +1206,24 @@ export class MockApiClient implements ApiClient {
 
   // ============ Reports ============
   async getDailySalesReport(branchId: string, date: string): Promise<DailySalesReport> {
-    await delay(300);
-    
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const sales = mockState.salesDocuments.filter(d => {
-      const created = new Date(d.createdAt);
-      return d.branchId === branchId && created >= startOfDay && created <= endOfDay;
-    });
-
-    const byPaymentMethod: Record<PaymentMethod, number> = { CASH: 0, CARD: 0, TRANSFER: 0, CHECK: 0, OTHER: 0 };
+    const report = await this.getSalesReport(branchId, { from: date, to: date });
     const byDocType: Record<DocumentType, number> = { BOLETA: 0, FACTURA: 0, CREDIT_NOTE: 0 };
-
-    for (const sale of sales) {
-      byDocType[sale.docType] += sale.total;
-      const payments = mockState.payments.filter(p => p.salesDocumentId === sale.id);
-      for (const p of payments) {
-        byPaymentMethod[p.method] += p.amount;
-      }
-    }
-
-    return {
-      date,
-      branchId,
-      totalSales: sales.reduce((sum, s) => sum + s.total, 0),
-      totalTransactions: sales.length,
-      byPaymentMethod,
-      byDocType,
-    };
+    for (const d of report.documents) if (d.status === 'ISSUED') byDocType[d.docType] += (d.docType === 'CREDIT_NOTE' ? -1 : 1) * d.total;
+    return { date, branchId, totalSales: report.netSales, totalTransactions: report.transactions, byDocType, byPaymentMethod: report.byPaymentMethod };
   }
 
   // ============ Audit ============
-  async getAuditLogs(entityType?: string, entityId?: string): Promise<AuditLog[]> {
+  async getAuditLogs(entityType?: string, entityId?: string, filters: import('@/types').AuditFilters = {}): Promise<AuditLog[]> {
     await delay(200);
     let logs = mockState.auditLogs;
     if (entityType) logs = logs.filter(l => l.entityType === entityType);
     if (entityId) logs = logs.filter(l => l.entityId === entityId);
-    return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...logs].filter(l => (!filters.action || l.action === filters.action) &&
+      (!filters.userId || l.userId === filters.userId) && (!filters.from || l.createdAt >= filters.from) &&
+      (!filters.to || l.createdAt <= filters.to)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(filters.offset ?? 0, (filters.offset ?? 0) + 100);
   }
 }
 
 // Export singleton instance
 export const mockApiClient = new MockApiClient();
-

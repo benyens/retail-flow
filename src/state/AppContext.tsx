@@ -27,6 +27,26 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+/**
+ * Decodifica (sin verificar firma) el payload de un JWT para rehidratar la
+ * UI al recargar la página. La verificación real sigue pasando por el
+ * backend en cada request -- esto es puramente para no mostrar al usuario
+ * como "deslogueado" cuando el token en localStorage sigue siendo válido.
+ * Si el token no es un JWT real (ej. viene de MockApiClient) o está
+ * vencido, devuelve null y AppProvider simplemente no rehidrata.
+ */
+function decodeJwtPayload(token: string): { sub: string; email: string; name: string; rut: string; role: string; branchIds: string[]; exp: number } | null {
+  try {
+    const [, payloadB64] = token.split('.');
+    if (!payloadB64) return null;
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+    if (typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState>({
     user: null,
@@ -40,6 +60,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedCashRegister, setSelectedCashRegister] = useState<CashRegister | null>(null);
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Rehidratar sesión al montar (ej. tras recargar la página). Sin esto,
+  // un token válido en localStorage quedaba "huérfano": las requests
+  // seguían autenticadas correctamente, pero la UI mostraba al usuario
+  // como no-logueado hasta el próximo login manual.
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const payload = decodeJwtPayload(token);
+    if (!payload) {
+      localStorage.removeItem('auth_token');
+      return;
+    }
+    setAuth({
+      token,
+      isAuthenticated: true,
+      user: {
+        id: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        rut: payload.rut,
+        role: payload.role as User['role'],
+        branchIds: payload.branchIds,
+        isActive: true,
+      },
+    });
+  }, []);
 
   // Load branches on auth
   useEffect(() => {

@@ -91,6 +91,7 @@ export interface ApiClient {
   deleteProductCategory(id: string): Promise<void>;
 
   // Pricing
+  getPriceLists(): Promise<import('@/types').PriceList[]>;
   getVariantPrices(): Promise<VariantPrice[]>;
   setVariantPrice(variantId: string, priceListId: string, price: number): Promise<VariantPrice>;
   
@@ -174,8 +175,9 @@ export interface ApiClient {
   updateUser(id: string, user: Partial<User>): Promise<User>;
   
   // Reports
+  getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport>;
   getDailySalesReport(branchId: string, date: string): Promise<DailySalesReport>;
   
   // Audit
-  getAuditLogs(entityType?: string, entityId?: string): Promise<AuditLog[]>;
+  getAuditLogs(entityType?: string, entityId?: string, filters?: import('@/types').AuditFilters): Promise<AuditLog[]>;
 }

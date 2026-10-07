@@ -1,73 +1,76 @@
-# Welcome to your Lovable project
+# retail-flow
 
-## Project info
+ERP/POS para comercio minorista chileno: React + Vite + TypeScript en `src/`, Fastify + Prisma + PostgreSQL en `server/`.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+El contrato de API está en `src/api/client.ts`; las reglas del proyecto están en `AGENTS.md`. Consulta `server/README.md` para detalles del backend y pendientes funcionales.
 
-## How can I edit this code?
+## Desarrollo local
 
-There are several ways of editing your application.
+Requisitos: Node.js 20.19+ (rama 20) o 22.12+, npm y Docker Desktop iniciado.
 
-**Use Lovable**
+Desde la raíz:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```powershell
+npm ci
+docker compose up -d db
+Copy-Item server/.env.example server/.env
+cd server
+npm ci
+npm run prisma:generate
+npx prisma migrate deploy
+npm run prisma:seed
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+La copia de `.env` solo es necesaria la primera vez. El servidor carga ese archivo al iniciar. PostgreSQL queda en localhost:5432, con almacenamiento persistente en el volumen de Compose.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+En otra terminal, desde la raíz, crea `.env.local`:
 
-**Use GitHub Codespaces**
+```dotenv
+VITE_USE_MOCK=false
+VITE_API_BASE_URL=http://localhost:3000
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Luego ejecuta `npm run dev` y abre http://localhost:8080. Backend: http://localhost:3000/health.
 
-## What technologies are used for this project?
+Usuario local de ejemplo: `admin@retailflow.local` / `admin1234`.
 
-This project is built with:
+Para usar datos en memoria, configura `VITE_USE_MOCK=true`. `docker compose up frontend` conserva el frontend en modo mock en el puerto 5173.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Verificación
 
-## How can I deploy this project?
+Desde la raíz:
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+```powershell
+npx tsc -p tsconfig.app.json --noEmit
+npm run build
+cd server
+npx tsc --noEmit
+npm run test:smoke
+npm run test:security
+```
 
-## Can I connect a custom domain to my Lovable project?
+La prueba de integración requiere PostgreSQL migrado y seed aplicado. Usa las rutas Fastify contra la base real y comprueba login, producto, compra con IVA, venta, devolución, stock y arqueo. Crea registros identificados con `SMOKE-` y los conserva para inspección; úsala en una base de desarrollo. No sustituye pruebas de navegador ni de concurrencia.
 
-Yes, you can!
+## Estado verificado — 14 de septiembre de 2026
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- Cliente Prisma generado y migración inicial aplicada en PostgreSQL 16.
+- Seed y prueba de integración completados.
+- TypeScript del frontend/backend y build del frontend correctos.
+- Vite advierte que el bundle principal supera 500 kB; la compilación finaliza.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Próximos trabajos funcionales documentados: ampliar empleados, renovación de sesión y ampliar auditoría. La emisión DTE continúa como `INTERNAL_STUB`, sin conexión real al SII.
+
+## Facturas, reportes y teclado
+
+- **Facturas** (`/admin/facturas`): buscar por número, proveedor o RUT; filtrar proveedor, fechas y estado; ordenar, paginar, exportar CSV y consultar detalle. El botón **Ingresar factura** abre el formulario existente. La edición de cabecera no vuelve a aplicar stock.
+- **Reportes**: períodos de hasta 366 días, folio/cliente/RUT, tipo y estado del documento, detalle y CSV. Totales por fecha de Chile, notas de crédito descontadas y documentos anulados excluidos de los importes.
+- **Auditoría**: exclusiva de administradores, filtros por acción, usuario, entidad y fechas, páginas de 100 eventos y comparación de datos anteriores/posteriores.
+
+Atajos globales: `Alt+P` venta, `Alt+F` facturas, `Alt+N` ingresar factura, `Alt+R` precios y `Ctrl+/` ayuda. `F1` enfoca la búsqueda. En ingreso de facturas: `F4` guarda, `F6` proveedores, `F7` producto rápido. En precios, `Enter` guarda la fila. Los atajos de navegación respetan los diálogos abiertos y la confirmación de cambios pendientes en enlaces/atajos. Esto amplía el manejo por teclado; aún no certifica todos los flujos del POS sin ratón.
+
+`test:security` comprueba autorización vertical y por sucursal, cambios de rol/estado con JWT existente, precios y totales manipulados, devolución concurrente, auditoría, CORS y límite de login. Conserva registros SECURITY y desactiva sus usuarios de prueba. Ejecutar solo sobre desarrollo. Ver [revisión de seguridad](SECURITY_REVIEW.md) para cobertura y pendientes.
+
+## Sesiones — 5 de octubre de 2026
+
+Cerrar sesión revoca el token en PostgreSQL; no basta con copiarlo para reutilizarlo después. Logins simultáneos son independientes. Antes de arrancar una instalación existente, ejecutar `npx prisma migrate deploy` desde `server`. Verificación adicional: `npm run test:sessions` (requiere seed de desarrollo). Migración y prueba verificadas localmente, incluidos rechazo del token revocado y persistencia entre instancias. JWT conserva duración de 12 horas, sin renovación automática.

@@ -1,3 +1,7 @@
+import { localDay } from "@/components/ui/data-tools";
+import { Link } from "react-router-dom";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiClient } from "@/api";
 import { useApp } from "@/state/AppContext";
@@ -47,6 +51,8 @@ const newId = () =>
 
 export default function PurchaseEntryPage() {
   const { selectedBranch } = useApp();
+  const cache = useQueryClient();
+  const savingRef = useRef(false);
 
   // Datos base
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -56,7 +62,7 @@ export default function PurchaseEntryPage() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
+    localDay()
   );
   const [notes, setNotes] = useState("");
 
@@ -65,6 +71,8 @@ export default function PurchaseEntryPage() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [lines, setLines] = useState<PurchaseLineDraft[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useUnsavedChanges(lines.length > 0 || !!invoiceNumber || !!notes);
 
   // Nuevo proveedor (diálogo)
   const [isSupplierDialogOpen, setSupplierDialogOpen] = useState(false);
@@ -181,6 +189,8 @@ export default function PurchaseEntryPage() {
     // Atajos globales: F4 = guardar factura, F6 = nuevo proveedor
   useEffect(() => {
   const handler = (e: KeyboardEvent) => {
+      if (e.repeat || e.isComposing || document.querySelector('[role="dialog"], [role="listbox"]')) return;
+      if (e.key === "F7") { e.preventDefault(); setProductDialogOpen(true); return; }
       if (e.key === "F4") {
         e.preventDefault();
         handleSave();
@@ -307,6 +317,7 @@ export default function PurchaseEntryPage() {
   };
 
   const handleSave = async () => {
+    if (savingRef.current || isEditing) return;
     if (!selectedBranch) {
       toast.error("Debe seleccionar una sucursal");
       return;
@@ -320,12 +331,13 @@ export default function PurchaseEntryPage() {
       return;
     }
 
+    if (lines.some(l => !l.variant || !Number.isFinite(Number(l.quantity)) || Number(l.quantity) <= 0 || !l.unitCost.trim() || !Number.isFinite(Number(l.unitCost)) || Number(l.unitCost) < 0)) { toast.error("Revisa cantidad y costo de todas las líneas"); return; }
     const payloadLines = lines
       .filter(
         (l) =>
           l.variant &&
           Number(l.quantity) > 0 &&
-          Number(l.unitCost) > 0
+          Number(l.unitCost) >= 0
       )
       .map((l) => ({
         variantId: l.variant!.id,
@@ -338,6 +350,7 @@ export default function PurchaseEntryPage() {
       return;
     }
 
+    savingRef.current = true;
     setSaving(true);
     try {
       const invoice = await apiClient.createPurchase(
@@ -349,6 +362,7 @@ export default function PurchaseEntryPage() {
         payloadLines
       );
 
+      cache.invalidateQueries({ queryKey: ["purchases"] });
       toast.success("Factura de compra registrada");
 
       // agregamos al listado de facturas (encabezado)
@@ -363,6 +377,7 @@ export default function PurchaseEntryPage() {
       console.error(e);
       toast.error("Error al registrar la compra");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -628,269 +643,16 @@ export default function PurchaseEntryPage() {
   // ----------------- RENDER -----------------
   return (
     <div className="p-6 space-y-6">
+      <Button asChild variant="outline"><Link to="/admin/facturas">← Volver a facturas</Link></Button>
       <Card>
         <CardHeader>
-          <CardTitle>Ingreso de documentos de compra</CardTitle>
+          <CardTitle>Ingresar factura</CardTitle>
           <CardDescription className="text-xs">
-            Revisa facturas de compra ya registradas y agrega nuevas
-            para actualizar stock y costos.
+            F1: buscar · F4: guardar · F6: proveedor · F7: producto. El registro aplica stock inmediatamente.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* --- LISTADO DE FACTURAS ARRIBA --- */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-sm">
-                  Facturas registradas
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Busca por número, proveedor, RUT o fecha y haz
-                  clic para ver el detalle.
-                </p>
-              </div>
-              <div className="text-[11px] text-muted-foreground">
-                Total documentos: {purchases.length}
-              </div>
-            </div>
-
-            {!selectedBranch ? (
-              <p className="text-sm text-muted-foreground">
-                Selecciona una sucursal para ver sus facturas de
-                compra.
-              </p>
-            ) : (
-              <>
-                <Input
-                  className="max-w-sm"
-                  placeholder="Buscar factura..."
-                  value={purchaseSearch}
-                  onChange={(e) =>
-                    setPurchaseSearch(e.target.value)
-                  }
-                />
-
-                <div className="border rounded-md max-h-52 overflow-auto text-xs">
-                  <table className="w-full">
-                    <thead className="bg-muted/60">
-                      <tr>
-                        <th className="px-3 py-1 text-left">
-                          Fecha
-                        </th>
-                        <th className="px-3 py-1 text-left">
-                          Proveedor
-                        </th>
-                        <th className="px-3 py-1 text-left">
-                          N° doc
-                        </th>
-                        <th className="px-3 py-1 text-right">
-                          Total
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visiblePurchases.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            className="px-3 py-2 text-center text-muted-foreground"
-                          >
-                            No hay documentos que coincidan.
-                          </td>
-                        </tr>
-                      ) : (
-                        visiblePurchases.map((p) => {
-                          const supplier = suppliers.find(
-                            (s) => s.id === p.supplierId
-                          );
-                          const isSelected =
-                            p.id === selectedPurchaseId;
-                          return (
-                            <tr
-                              key={p.id}
-                              className={`border-t cursor-pointer hover:bg-muted ${
-                                isSelected
-                                  ? "bg-primary/5"
-                                  : ""
-                              }`}
-                              onClick={async () => {
-                                setSelectedPurchaseId(p.id);
-
-                                // Si es DRAFT, permitir "editar" cargando en el formulario
-                                if ((p as any).status === "DRAFT") {
-                                  try {
-                                    setLoadingPurchaseDetail(true);
-                                    const pls = await apiClient.getPurchaseLines(p.id);
-
-                                    setEditingPurchaseId(p.id);
-                                    setSelectedSupplierId(p.supplierId);
-                                    setInvoiceNumber(p.invoiceNumber);
-                                    setInvoiceDate((p as any).invoiceDate ?? (p.createdAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)));
-                                    setNotes((p as any).notes ?? "");
-
-                                    // cargar líneas al formulario editable
-                                    setLines(linesFromPurchase(pls, variantMap));
-
-                                    toast.message("Editando factura en estado DRAFT");
-                                  } catch (e) {
-                                    console.error(e);
-                                    toast.error("No se pudo cargar la factura para editar");
-                                  } finally {
-                                    setLoadingPurchaseDetail(false);
-                                  }
-                                } else {
-                                  // si no es DRAFT, solo vista detalle (no tocar el form)
-                                  setEditingPurchaseId(null);
-                                }
-                              }}
-                            >
-                              <td className="px-3 py-1">
-                                {p.createdAt
-                                  ? p.createdAt.slice(0, 10)
-                                  : "—"}
-                              </td>
-                              <td className="px-3 py-1">
-                                {supplier
-                                  ? `${supplier.name}${
-                                      supplier.rut
-                                        ? ` (${supplier.rut})`
-                                        : ""
-                                    }`
-                                  : "—"}
-                              </td>
-                              <td className="px-3 py-1">
-                                {p.invoiceNumber}
-                              </td>
-                              <td className="px-3 py-1 text-right font-mono">
-                                {formatCurrency(p.total)}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Detalle dentro del mismo card */}
-                {selectedPurchase && (
-                  <div className="border rounded-md p-3 space-y-2 text-xs">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-semibold">
-                          Detalle documento
-                        </div>
-                        <div className="text-muted-foreground">
-                          {selectedPurchase.invoiceNumber} ·{" "}
-                          {selectedPurchase.createdAt
-                            ? selectedPurchase.createdAt.slice(
-                                0,
-                                10
-                              )
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div>
-                          Neto:{" "}
-                          {formatCurrency(
-                            selectedPurchase.subtotal
-                          )}
-                        </div>
-                        <div>
-                          IVA:{" "}
-                          {formatCurrency(
-                            selectedPurchase.tax
-                          )}
-                        </div>
-                        <div className="font-semibold">
-                          Total:{" "}
-                          {formatCurrency(
-                            selectedPurchase.total
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border rounded-md max-h-40 overflow-auto mt-2">
-                      {loadingPurchaseDetail ? (
-                        <p className="p-2 text-muted-foreground">
-                          Cargando detalle...
-                        </p>
-                      ) : purchaseLines.length === 0 ? (
-                        <p className="p-2 text-muted-foreground">
-                          No hay detalle disponible para este
-                          documento.
-                        </p>
-                      ) : (
-                        <table className="w-full">
-                          <thead className="bg-muted/60">
-                            <tr>
-                              <th className="px-3 py-1 text-left">
-                                Producto
-                              </th>
-                              <th className="px-3 py-1 text-right">
-                                Cantidad
-                              </th>
-                              <th className="px-3 py-1 text-right">
-                                Costo unitario
-                              </th>
-                              <th className="px-3 py-1 text-right">
-                                Subtotal
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {purchaseLines.map((l) => {
-                              const v =
-                                variantMap.get(l.variantId);
-                              const label = v
-                                ? `${v.product.name} - ${v.name}`
-                                : l.variantId;
-                              return (
-                                <tr
-                                  key={l.id}
-                                  className="border-t last:border-b-0"
-                                >
-                                  <td className="px-3 py-1">
-                                    <div className="truncate">
-                                      {label}
-                                    </div>
-                                    {v?.sku && (
-                                      <div className="text-[11px] text-muted-foreground font-mono">
-                                        {v.sku}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-1 text-right">
-                                    {l.quantity}
-                                  </td>
-                                  <td className="px-3 py-1 text-right">
-                                    {formatCurrency(
-                                      l.unitCost
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-1 text-right">
-                                    {formatCurrency(
-                                      l.subtotal
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <hr className="my-2" />
-
           {/* --- NUEVA FACTURA --- */}
           <section className="space-y-4">
             <div>
@@ -904,119 +666,6 @@ export default function PurchaseEntryPage() {
                 automáticamente.
               </p>
 
-              {isEditing && (
-                <div className="flex flex-wrap gap-2 items-center">
-                  <div className="text-xs text-muted-foreground">
-                    ID: <span className="font-mono">{editingPurchaseId}</span>
-                  </div>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // reset modo edición (no borra selectedPurchaseId, solo sale del form)
-                      setEditingPurchaseId(null);
-                      setInvoiceNumber("");
-                      setNotes("");
-                      setProductSearch("");
-                      setLines([]);
-                    }}
-                  >
-                    Cancelar edición
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={updating}
-                    onClick={async () => {
-                      if (!editingPurchaseId) return;
-
-                      // Validaciones básicas (reusa tu lógica)
-                      if (!selectedBranch) return toast.error("Debe seleccionar una sucursal");
-                      if (!selectedSupplierId) return toast.error("Seleccione un proveedor");
-                      if (!invoiceNumber.trim()) return toast.error("Ingrese número de documento");
-
-                      const payloadLines = lines
-                        .filter((l) => l.variant && Number(l.quantity) > 0 && Number(l.unitCost) > 0)
-                        .map((l) => ({
-                          variantId: l.variant!.id,
-                          quantity: Number(l.quantity),
-                          unitCost: Number(l.unitCost),
-                        }));
-
-                      if (payloadLines.length === 0) return toast.error("Agregue al menos un producto válido");
-
-                      // recalcular totales (igual que createPurchase)
-                      const newSubtotal = payloadLines.reduce((sum, l) => sum + l.quantity * l.unitCost, 0);
-                      const newTax = Math.round(newSubtotal * 0.19);
-                      const newTotal = newSubtotal + newTax;
-
-                      setUpdating(true);
-                      try {
-                        const updated = await apiClient.updatePurchaseInvoice(editingPurchaseId, {
-                          supplierId: selectedSupplierId,
-                          invoiceNumber: invoiceNumber.trim(),
-                          invoiceDate,
-                          notes,
-                          subtotal: newSubtotal,
-                          tax: newTax,
-                          total: newTotal,
-                        } as any);
-
-                        // 🔴 Importante: en mock simplificado NO reescribimos PurchaseLines aún.
-                        // En el siguiente paso lo hacemos bien (update líneas), pero por ahora dejamos header+totales.
-
-                        // refrescar listado
-                        const list = await apiClient.getPurchases(selectedBranch.id);
-                        setPurchases([...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-
-                        toast.success("Factura actualizada (DRAFT)");
-                      } catch (e) {
-                        console.error(e);
-                        toast.error(e instanceof Error ? e.message : "Error al actualizar factura");
-                      } finally {
-                        setUpdating(false);
-                      }
-                    }}
-                  >
-                    {updating ? "Guardando..." : "Guardar cambios"}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={sendingToSii}
-                    onClick={async () => {
-                      if (!editingPurchaseId || !selectedBranch) return;
-
-                      setSendingToSii(true);
-                      try {
-                        await apiClient.sendPurchaseInvoiceToSII(editingPurchaseId);
-
-                        const list = await apiClient.getPurchases(selectedBranch.id);
-                        setPurchases([...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-
-                        toast.success("Factura enviada a SII (mock)");
-                        setEditingPurchaseId(null);
-                        setInvoiceNumber("");
-                        setNotes("");
-                        setProductSearch("");
-                        setLines([]);
-                      } catch (e) {
-                        console.error(e);
-                        toast.error(e instanceof Error ? e.message : "No se pudo enviar a SII");
-                      } finally {
-                        setSendingToSii(false);
-                      }
-                    }}
-                  >
-                    {sendingToSii ? "Enviando..." : "Enviar a SII"}
-                  </Button>
-                </div>
-              )}
             </div>
 
             {/* Encabezado documento */}
@@ -1030,7 +679,7 @@ export default function PurchaseEntryPage() {
                     value={selectedSupplierId}
                     onValueChange={setSelectedSupplierId}
                   >
-                    <SelectTrigger className="flex-1">
+                    <SelectTrigger aria-label="Proveedor" className="flex-1">
                       <SelectValue placeholder="Seleccionar proveedor" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1062,7 +711,7 @@ export default function PurchaseEntryPage() {
                   N° documento (factura, boleta compra, etc.)
                 </label>
                 <Input
-                  value={invoiceNumber}
+                  aria-label="Número de factura" value={invoiceNumber}
                   onChange={(e) =>
                     setInvoiceNumber(e.target.value)
                   }
@@ -1076,7 +725,7 @@ export default function PurchaseEntryPage() {
                 </label>
                 <Input
                   type="date"
-                  value={invoiceDate}
+                  aria-label="Fecha de factura" value={invoiceDate}
                   onChange={(e) =>
                     setInvoiceDate(e.target.value)
                   }
@@ -1090,7 +739,7 @@ export default function PurchaseEntryPage() {
               </label>
               <Textarea
                 rows={2}
-                value={notes}
+                aria-label="Observaciones" value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Notas internas sobre esta compra..."
               />
@@ -1112,7 +761,7 @@ export default function PurchaseEntryPage() {
                 </Button>
               </div>
               <Input
-                placeholder="Buscar por SKU, nombre o código de barras..."
+                data-search-focus aria-label="Buscar por SKU, nombre o código de barras..." placeholder="Buscar por SKU, nombre o código de barras..."
                 value={productSearch}
                 onChange={(e) =>
                   setProductSearch(e.target.value)

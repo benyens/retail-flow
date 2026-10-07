@@ -177,20 +177,21 @@ export default function POSPage() {
 
     (async () => {
       try {
-        const [v, t, vp, st, cs, emps] = await Promise.all([
+        const [v, t, vp, st, cs, emps, lists] = await Promise.all([
           apiClient.getVariants(selectedCashRegister.branchId),
           apiClient.getWholesaleTiers(),
           apiClient.getVariantPrices(),
           apiClient.getStock(selectedCashRegister.branchId),
           apiClient.getCustomers(),
           apiClient.getEmployees(selectedCashRegister.branchId),
+          apiClient.getPriceLists(),
         ]);
 
         setVariants(v);
         setTiers(t);
 
         // precios normales (lista pl-1)
-        const normalPriceListId = "pl-1";
+        const normalPriceListId = lists.find(l => l.type === "NORMAL")?.id;
         const pMap = new Map<string, number>();
         (vp as VariantPrice[])
           .filter((x) => x.priceListId === normalPriceListId)
@@ -391,7 +392,7 @@ export default function POSPage() {
           target.isContentEditable);
 
       // --- Si estoy en la pantalla de pago, no dejo que estas teclas toquen el carrito ---
-      if (isPaymentOpen) return;
+      if (e.repeat || e.isComposing || document.querySelector('[role="dialog"], [role="listbox"]')) return;
       if (!currentSession) return;
 
       // F1: foco buscador de productos
@@ -452,13 +453,6 @@ export default function POSPage() {
           setCart(emptyCart);
           setSelectedCartIndex(-1);
         }
-        return;
-      }
-
-      // F10: ir a pantalla de ingreso de facturas de compra
-      if (e.key === "F10") {
-        e.preventDefault();
-        navigate("/ingresar-facturas");
         return;
       }
 
@@ -832,7 +826,7 @@ export default function POSPage() {
           </div>
           <div className="text-[10px] text-muted-foreground">
             Atajos: F1 productos · F3 clientes · F2 boleta/factura ·
-            F4 pagar · F8 vaciar · F10 ingreso facturas
+            F4 pagar · F8 vaciar · Alt+N ingreso facturas
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1233,7 +1227,7 @@ export default function POSPage() {
               <span>{formatCurrency(cart.total)}</span>
             </div>
             <div className="text-[10px] text-muted-foreground text-right">
-              F10: Ingreso facturas de compra
+              Alt+N: Ingresar factura (administración)
             </div>
           </div>
 

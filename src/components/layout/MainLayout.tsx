@@ -1,3 +1,4 @@
+import KeyboardShortcuts from "./KeyboardShortcuts";
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useApp } from '@/state/AppContext';
@@ -16,6 +17,7 @@ export default function MainLayout() {
     <div className="flex h-screen w-full bg-background">
       <Sidebar />
       <main className="flex-1 overflow-auto">
+        <div className="flex justify-end px-6 border-b"><KeyboardShortcuts /></div>
         <Outlet />
       </main>
     </div>

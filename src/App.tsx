@@ -1,8 +1,10 @@
+import { useEffect, useRef } from "react";
+import AuditPage from "@/modules/admin/pages/AuditPage";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AppProvider, useApp } from "@/state/AppContext";
 import LoginPage from "@/pages/LoginPage";
 import MainLayout from "@/components/layout/MainLayout";
@@ -15,6 +17,11 @@ import WholesalePage from "@/modules/admin/pages/WholesalePage";
 import PriceManagementPage from "@/modules/admin/pages/PriceManagmentPage";
 import ProductCatalogPage from "@/modules/admin/pages/ProductCatalogPage";
 import PurchaseEntryPage from "@/modules/purchases/pages/PurchaseEntryPage";
+import PurchaseListPage from "@/modules/purchases/pages/PurchaseListPage";
+import ReportsPage from "@/modules/admin/pages/ReportsPage";
+import StockPage from "@/modules/admin/pages/StockPage";
+import EmployeesPage from "@/modules/admin/pages/EmployeesPage";
+import UsersPage from "@/modules/admin/pages/UsersPage";
 
 const queryClient = new QueryClient();
 
@@ -26,8 +33,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ onlyAdmin = false }: { onlyAdmin?: boolean }) {
+  const { auth } = useApp();
+  const allowed = onlyAdmin ? auth.user?.role === 'ADMIN' : ['ADMIN', 'MANAGER'].includes(auth.user?.role ?? '');
+  return allowed ? <Outlet /> : <div className="p-8" role="alert"><h1 className="text-xl font-bold">Acceso restringido</h1><p>No tienes permisos para esta sección.</p></div>;
+}
+
 function AppRoutes() {
   const { auth } = useApp();
+  const previousUser = useRef(auth.user?.id);
+  useEffect(() => { if (previousUser.current !== auth.user?.id) { queryClient.clear(); previousUser.current = auth.user?.id; } }, [auth.user?.id]);
 
   return (
     <Routes>
@@ -50,16 +65,21 @@ function AppRoutes() {
         <Route path="pos/movimientos" element={<CashMovementsPage />} />
         <Route path="pos/cerrar" element={<CashClosePage />} />
     
+        <Route element={<AdminRoute />}>
         <Route path="admin/catalogo" element={<ProductCatalogPage />} />
         <Route path="admin/precios" element={<PriceManagementPage />} />
         <Route path="admin/mayorista" element={<WholesalePage />} />
         <Route path="admin/ingresar-factura" element={<PurchaseEntryPage />} />
-        <Route path="admin/stock" element={<div className="p-8"><h1 className="text-2xl font-bold">Stock</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/purchases" element={<div className="p-8"><h1 className="text-2xl font-bold">Compras</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/employees" element={<div className="p-8"><h1 className="text-2xl font-bold">Empleados</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/reports" element={<div className="p-8"><h1 className="text-2xl font-bold">Reportes</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/audit" element={<div className="p-8"><h1 className="text-2xl font-bold">Auditoría</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
-        <Route path="admin/users" element={<div className="p-8"><h1 className="text-2xl font-bold">Usuarios</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
+        <Route path="admin/stock" element={<StockPage />} />
+        <Route path="admin/facturas" element={<PurchaseListPage />} />
+        <Route path="admin/purchases" element={<Navigate to="/admin/facturas" replace />} />
+        <Route path="admin/employees" element={<EmployeesPage />} />
+        <Route path="admin/reports" element={<ReportsPage />} />
+        </Route>
+        <Route element={<AdminRoute onlyAdmin />}>
+          <Route path="admin/audit" element={<AuditPage />} />
+          <Route path="admin/users" element={<UsersPage />} />
+        </Route>
       </Route>
       
       <Route path="*" element={<NotFound />} />

@@ -159,6 +159,31 @@ export interface VariantWithProduct extends Variant {
 
 export type QuickProductMode = "NEW_PRODUCT" | "ADD_VARIANT";
 
+export interface SalesReportFilters {
+  from: string;
+  to: string;
+  docType?: DocumentType;
+  status?: DocumentStatus;
+  query?: string;
+}
+
+export interface SalesReport {
+  documents: SalesDocument[];
+  grossSales: number;
+  refunds: number;
+  netSales: number;
+  transactions: number;
+  byPaymentMethod: Record<PaymentMethod, number>;
+}
+
+export interface AuditFilters {
+  action?: string;
+  userId?: string;
+  from?: string;
+  to?: string;
+  offset?: number;
+}
+
 export type QuickProductPayload = {
   mode: QuickProductMode;
 
