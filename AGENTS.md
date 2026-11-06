@@ -49,7 +49,7 @@ Para volver al modo mock (sin backend): `VITE_USE_MOCK=true` o borrar `.env.loca
 
 Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma) + `X.routes.ts` (Fastify + Zod + wiring de permisos). Los servicios nunca importan Fastify; las rutas nunca hacen queries directas a Prisma.
 
-- `auth/` — login/logout/change-password, JWT (12h, sin refresh). Login: límite 10/min por IP y 5/min por cuenta, correo sin distinguir mayúsculas, tiempo constante exista o no la cuenta. `users.tokensValidAfter` invalida los JWT emitidos antes de un cambio o reset de contraseña (lo revisa `plugins/auth.ts`).
+- `auth/` — login/logout/refresh/change-password. JWT de 12 h con claim `authTime`; `/auth/refresh` emite uno nuevo hasta 7 días desde el login (`MAX_SESSION_SECONDS`). El cliente renueva cuando quedan < 4 h (`utils/session.ts`, `httpApiClient.maybeRefresh`, `AppContext`). Login: límite 10/min por IP y 5/min por cuenta, correo sin distinguir mayúsculas, tiempo constante exista o no la cuenta. `users.tokensValidAfter` invalida los JWT emitidos antes de un cambio o reset de contraseña (lo revisa `plugins/auth.ts`).
 - `lookups/` — branches, cash registers, product categories (listas simples).
 - `catalog/` — products, variant groups, variants, `createQuickProduct`, precios, escalones mayoristas.
 - `stock/` — inventario, movimientos, ajustes.
@@ -58,7 +58,8 @@ Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma
 - `purchases/` — proveedores, facturas de compra (aplica stock al crear, no hay paso de "recepción" separado).
 - `employees/` — CRUD básico.
 - `users/` — CRUD y reset de contraseña (`POST /users/:id/password`), solo ADMIN. Un ADMIN no puede quitarse el rol ni desactivarse, y siempre queda al menos un ADMIN activo (409).
-- `reports/` — reporte de ventas diario + `AuditService` (log de acciones sensibles) + auditoría.
+- `reports/` — reporte de ventas (totales con `groupBy` en la base, documentos paginados con `offset/limit`, límites de día en horario de Chile con `chileDayStart`), `getDashboard` para `/inicio`, `AuditService` y auditoría.
+- `plugins/audit-trail.ts` — audita mantenedores (catálogo, mayoristas, categorías, proveedores, empleados, clientes) por ruta, con antes/después. Si agregas una ruta de mantenedor, súmala a `RULES`; ventas, caja, stock, compras, precios y usuarios se auditan dentro de sus servicios.
 
 `prisma/schema.prisma` es la fuente de verdad del modelo de datos. Cada modelo está mapeado 1:1 contra los tipos de `src/types/index.ts` (mismos nombres de campo) — si un DTO no calza exacto con el tipo del frontend, es un bug.
 
@@ -99,6 +100,16 @@ Corre ambos después de cualquier cambio. La generación Prisma, migración inic
 - Las páginas secundarias se cargan con `React.lazy` (ver `App.tsx`); `main.tsx` recarga una vez si tras un deploy falta un fragmento.
 - Diálogos (`components/ui/dialog.tsx`) limitan alto y ancho al viewport y hacen scroll interno.
 - Verificación visual: `/home/claude/qa/shots.py` (no versionado) o cualquier Playwright con `devices['iPhone 13']` y 1366×800.
+
+## Funciones recientes (frontend)
+
+- `/inicio` (`DashboardPage`): ADMIN/MANAGER entran ahí; CASHIER va a `/pos`.
+- Stock mínimo por sucursal (`Stock.minQuantity`, `PUT /stock/minimum`); "por reponer" = `isLowStock` en `utils/stock.ts`. `StockPage` acepta `?filtro=reponer|sin-stock`.
+- `BarcodeScanButton`: `BarcodeDetector` nativo o `@zxing/browser` cargado bajo demanda. `vercel.json` permite `camera=(self)`.
+- `/comprobante/:id` (`ReceiptPage`, fuera de `MainLayout`): imprime 58/80 mm y comparte texto. Dice explícitamente que no es documento tributario.
+- Tablas → tarjetas en celular: clase `table-cards` en `<table>` + `data-label` en cada `<td>` (`index.css`). `data-label=""` = celda de acciones.
+- Listado de facturas usa `searchPurchases` (filtros y paginación en el servidor); `getPurchases` queda para usos internos.
+- Instalar dependencias del frontend en entornos sin acceso a `cdn.sheetjs.com` falla por `xlsx`; en Vercel funciona normal.
 
 ## Qué NO hacer
 

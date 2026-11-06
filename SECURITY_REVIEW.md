@@ -43,16 +43,24 @@ Los recursos de sucursal respetan las asignaciones también para ADMIN. Catálog
 - **Frontend**: un 401 con sesión cierra la sesión local y avisa (antes la interfaz quedaba "conectada" sin funcionar); logout revoca el token aunque falle la red local; `noindex` en el HTML.
 - Evidencia: `test:smoke`, `test:security` (ahora con límite por cuenta y XFF falsificado) y `test:sessions` pasan; pruebas manuales con curl de cambio/reset de contraseña, 409 de proveedor duplicado sin fuga de Prisma y tiempos de login iguales (~320 ms) para cuentas existentes e inexistentes; Playwright en iPhone 13 y 1366×800.
 
+## Pasada 2026-11-06
+
+- **Renovación de sesión**: `POST /auth/refresh` (autenticado, 20/min) emite un JWT nuevo con rol y sucursales actuales, conservando `authTime`; pasados 7 días desde el login responde `SESSION_TOO_OLD`. Un token revocado o anterior a un cambio de contraseña no puede renovarse. El token anterior no se revoca (evita cortar peticiones en curso) y vence a las 12 h.
+- **Auditoría** ampliada a catálogo, mayoristas, categorías, proveedores, empleados, clientes y stock mínimo, con estado antes/después y usuario. Se registra solo tras autenticación, permisos y respuesta exitosa.
+- **Paginación en servidor** para reportes de ventas y facturas de compra (máx. 5.000 por exportación) con validación zod de `offset/limit`.
+- **Cámara**: `Permissions-Policy: camera=(self)` para el escáner; micrófono, ubicación y pagos siguen bloqueados. La imagen no sale del navegador.
+- **Comprobante**: endpoint `GET /sales/:id/receipt` con la misma verificación de sucursal que `/sales/:id`.
+
 ## Límites y próximos trabajos
 
 1. JWT permanece en localStorage; el token expira a las 12 horas. Desde 2026-10-05, logout revoca su hash SHA-256 en PostgreSQL y cada petición comprueba esa revocación, incluso entre instancias. Cada login tiene un identificador aleatorio independiente. Falta renovación de token; cambiar o resetear la contraseña cierra todas las sesiones del usuario (`tokensValidAfter`). Cambios de rol, sucursal y desactivación sí se aplican en la siguiente petición.
-2. Auditoría no registra todavía todas las mutaciones de catálogo, proveedores, empleados o precios masivos. No hay retención inmutable ni protección frente a administradores directos de PostgreSQL.
+2. La auditoría de mantenedores se registra después de la operación (no en la misma transacción): si falla el registro, la operación queda hecha y el error va al log. Los precios masivos se auditan precio por precio. No hay retención inmutable ni protección frente a administradores directos de PostgreSQL.
 3. El limitador vive en memoria por proceso. Despliegues múltiples requieren almacenamiento compartido y configuración explícita del proxy. Configurar HTTPS, secretos únicos, CORS y cuentas reales antes de producción; el seed es para desarrollo.
-4. Facturas se cargan por sucursal y los reportes por período; la paginación visual no reduce ese volumen. Falta paginación del servidor y medición de índices con datos reales a escala.
+4. Reportes y facturas se paginan en el servidor; historial de ventas del POS, stock y auditoría aún cargan listas completas o de 100 en 100. Falta medir índices con datos reales a escala.
 5. El formulario evita doble guardado simultáneo en el cliente, pero la creación de compras no tiene todavía clave de idempotencia ni restricción comercial de factura duplicada por proveedor.
 6. La protección de borradores cubre enlaces, atajos y salida de página; falta cubrir el botón Atrás interno del navegador y verificar exhaustivamente accesibilidad y todos los flujos solo con teclado.
 7. DTE continúa simulado con INTERNAL_STUB. No se conecta al SII.
-8. Vite advierte del tamaño del bundle principal; queda pendiente dividirlo por rutas.
+8. Las páginas secundarias ya se cargan por ruta; el bundle principal (POS, ~500 kB sin comprimir) aún podría dividirse más.
 
 ## Migración de sesiones — 2026-10-05
 

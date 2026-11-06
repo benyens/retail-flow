@@ -51,6 +51,15 @@ try {
   await req(cashier.token, 'PUT', '/variant-prices', { variantId: variant.id, priceListId: normal.id, price: 1 }, 403);
   await req(manager.token, 'PUT', '/variant-prices', { variantId: variant.id, priceListId: normal.id, price: 1190 });
   const supplier = await app.prisma.supplier.findFirstOrThrow();
+  // Auditoría de mantenedores: alta y cambio de proveedor quedan con antes/después.
+  const sup = await req(admin.token, 'POST', '/suppliers', { name: run, rut: `${run}-K` }, 201);
+  await req(admin.token, 'PATCH', `/suppliers/${sup.id}`, { phone: '+56 9 1234 5678' });
+  await req(cashier.token, 'PATCH', `/suppliers/${sup.id}`, { phone: 'x' }, 403);
+  const supAudit = await req(admin.token, 'GET', `/audit-logs?entityType=Supplier&entityId=${sup.id}`);
+  assert.deepEqual(supAudit.map((l: { action: string }) => l.action).sort(), ['CREATE_SUPPLIER', 'UPDATE_SUPPLIER']);
+  const upd = supAudit.find((l: { action: string }) => l.action === 'UPDATE_SUPPLIER');
+  assert.equal(upd.beforeData.phone, null); assert.equal(upd.afterData.phone, '+56 9 1234 5678'); assert.equal(upd.userId, admin.user.id);
+  assertions += 4;
   const purchase = await req(admin.token, 'POST', '/purchases', { branchId: a.id, supplierId: supplier.id, invoiceNumber: run, invoiceDate: '2026-09-13', lines: [{ variantId: variant.id, quantity: 10, unitCost: 500 }] }, 201);
   await req(foreign.token, 'GET', `/purchases/${purchase.id}/lines`, undefined, 403);
   await req(foreign.token, 'PATCH', `/purchases/${purchase.id}`, { notes: 'Forbidden' }, 403);
@@ -68,6 +77,14 @@ try {
   const report = await req(admin.token, 'GET', `/reports/sales?branchId=${a.id}&from=${day}&to=${day}`);
   assert.equal(report.grossSales, 2380); assert.equal(report.refunds, 2380); assert.equal(report.netSales, 0); assert.equal(report.byPaymentMethod.CASH, 0);
   assert.equal(report.transactions, 1); assertions += 5;
+  // Paginación: totales sobre todo el período aunque la página venga vacía.
+  assert.equal(report.totalDocuments, 2); assert.equal(report.byDocType.BOLETA, 2380); assert.equal(report.byDocType.CREDIT_NOTE, -2380);
+  const page2 = await req(admin.token, 'GET', `/reports/sales?branchId=${a.id}&from=${day}&to=${day}&offset=1&limit=1`);
+  assert.equal(page2.documents.length, 1); assert.equal(page2.totalDocuments, 2); assert.equal(page2.grossSales, 2380);
+  const found = await req(admin.token, 'GET', `/purchases/search?branchId=${a.id}&query=${encodeURIComponent(run)}`);
+  assert.equal(found.total, 1); assert.equal(found.items[0].id, purchase.id); assert.equal(found.totalAmount, purchase.total);
+  await req(foreign.token, 'GET', `/purchases/search?branchId=${a.id}`, undefined, 403);
+  assertions += 9;
   await req(admin.token, 'GET', `/reports/sales?branchId=${a.id}&from=2026-02-30&to=2026-03-02`, undefined, 422);
   const filtered = await req(admin.token, 'GET', `/reports/sales?branchId=${a.id}&from=${day}&to=${day}&status=VOID_INTERNAL`);
   assert.equal(filtered.documents.length, 0);

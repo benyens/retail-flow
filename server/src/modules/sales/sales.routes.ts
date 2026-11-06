@@ -60,6 +60,10 @@ export async function salesRoutes(fastify: FastifyInstance) {
     return service.getSales(branchId, sessionId);
   });
 
+  fastify.get("/api/v1/sales/:id/receipt", { preHandler: ro }, async (request) => {
+    const { id } = request.params as { id: string };
+    return service.getReceipt(id);
+  });
   fastify.get("/api/v1/sales/:id", { preHandler: ro }, async (request) => {
     const { id } = request.params as { id: string };
     return service.getSaleDetail(id);

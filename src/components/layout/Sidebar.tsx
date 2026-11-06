@@ -21,6 +21,7 @@ import {
   ChevronDown,
   DollarSign,
   KeyRound,
+  LayoutDashboard,
 } from 'lucide-react';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ const posLinks = [
 ];
 
 const adminLinks = [
+  { to: '/inicio', icon: LayoutDashboard, label: 'Inicio' },
   { to: '/admin/catalogo', icon: Package, label: 'Catálogo' },
   { to: '/admin/precios', icon: DollarSign, label: 'Precios' },
   { to: '/admin/mayorista', icon: Tags, label: 'Mayorista' },

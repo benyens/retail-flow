@@ -1,5 +1,5 @@
 import { AuditService } from "../reports/audit.service.js";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, Prisma, PurchaseInvoiceStatus } from "@prisma/client";
 
 export class PurchaseConflictError extends Error {
   readonly statusCode = 409;
@@ -38,6 +38,36 @@ export class PurchaseService {
 
   async updateSupplier(id: string, patch: Record<string, unknown>) {
     return this.prisma.supplier.update({ where: { id }, data: patch });
+  }
+
+  /** Búsqueda paginada en la base: texto (número, proveedor o RUT), proveedor, estado y fechas. */
+  async searchPurchases(branchId: string, f: {
+    query?: string; supplierId?: string; status?: PurchaseInvoiceStatus; from?: string; to?: string;
+    sort: "date" | "amount"; offset: number; limit: number;
+  }) {
+    const q = f.query?.trim();
+    const where: Prisma.PurchaseInvoiceWhereInput = {
+      branchId, supplierId: f.supplierId, status: f.status,
+      invoiceDate: f.from || f.to ? {
+        ...(f.from ? { gte: new Date(`${f.from}T00:00:00Z`) } : {}),
+        ...(f.to ? { lte: new Date(`${f.to}T00:00:00Z`) } : {}),
+      } : undefined,
+      ...(q ? { OR: [
+        { invoiceNumber: { contains: q, mode: "insensitive" } },
+        { supplier: { name: { contains: q, mode: "insensitive" } } },
+        { supplier: { rut: { contains: q, mode: "insensitive" } } },
+      ] } : {}),
+    };
+    const [total, rows, sum, suppliers] = await Promise.all([
+      this.prisma.purchaseInvoice.count({ where }),
+      this.prisma.purchaseInvoice.findMany({
+        where, skip: f.offset, take: f.limit,
+        orderBy: f.sort === "amount" ? [{ total: "desc" }, { id: "desc" }] : [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+      }),
+      this.prisma.purchaseInvoice.aggregate({ where, _sum: { total: true } }),
+      this.prisma.purchaseInvoice.groupBy({ by: ["supplierId"], where }),
+    ]);
+    return { items: rows.map(toPurchaseInvoiceDTO), total, totalAmount: Number(sum._sum.total ?? 0), supplierCount: suppliers.length };
   }
 
   async listPurchases(branchId: string) {

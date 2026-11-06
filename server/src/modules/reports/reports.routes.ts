@@ -26,6 +26,8 @@ const reportQuery = z.object({ branchId: z.string().min(1), from: day, to: day,
   docType: z.enum(['BOLETA', 'FACTURA', 'CREDIT_NOTE']).optional(),
   status: z.enum(['ISSUED', 'PENDING_ISSUE', 'REJECTED', 'VOID_INTERNAL']).optional(),
   query: z.string().max(200).optional(),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  limit: z.coerce.number().int().min(0).max(5000).default(25),
 }).refine(v => v.from <= v.to && +new Date(v.to) - +new Date(v.from) <= 366 * 86400000,
   'El rango debe estar ordenado y abarcar como máximo 366 días');
 
@@ -36,6 +38,12 @@ export async function reportsRoutes(fastify: FastifyInstance) {
     const parsed = reportQuery.safeParse(request.query);
     if (!parsed.success) return reply.status(422).send({ error: 'VALIDATION_ERROR', issues: parsed.error.flatten() });
     return reportService.getSalesReport(parsed.data.branchId, parsed.data);
+  });
+
+  fastify.get('/api/v1/reports/dashboard', { preHandler: [fastify.authenticate, fastify.authorize(['ADMIN', 'MANAGER'])] }, async (request, reply) => {
+    const parsed = z.object({ branchId: z.string().min(1) }).safeParse(request.query);
+    if (!parsed.success) return reply.status(422).send({ error: 'VALIDATION_ERROR', message: 'branchId es requerido' });
+    return reportService.getDashboard(parsed.data.branchId);
   });
 
   fastify.get(

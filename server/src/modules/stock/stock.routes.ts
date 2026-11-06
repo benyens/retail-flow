@@ -32,6 +32,14 @@ export async function stockRoutes(fastify: FastifyInstance) {
     const { movementId } = request.params as { movementId: string };
     return service.getInventoryLines(movementId);
   });
+  const minSchema = z.object({ branchId: z.string().min(1), variantId: z.string().min(1),
+    minQuantity: z.number().finite().min(0).max(1_000_000).nullable() });
+  fastify.put("/api/v1/stock/minimum", { preHandler: rw }, async (request, reply) => {
+    const parsed = minSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });
+    const { branchId, variantId, minQuantity } = parsed.data;
+    return service.setMinStock(branchId, variantId, minQuantity, request.user.sub);
+  });
   fastify.post("/api/v1/stock/adjustments", { preHandler: rw }, async (request, reply) => {
     const parsed = adjustmentSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });

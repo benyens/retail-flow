@@ -165,15 +165,53 @@ export interface SalesReportFilters {
   docType?: DocumentType;
   status?: DocumentStatus;
   query?: string;
+  /** Paginación de `documents` (los totales siempre cubren todo el período). */
+  offset?: number;
+  limit?: number;
 }
 
 export interface SalesReport {
+  /** Solo la página pedida; `totalDocuments` es el total que cumple los filtros. */
   documents: SalesDocument[];
+  totalDocuments: number;
+  byDocType: Record<DocumentType, number>;
   grossSales: number;
   refunds: number;
   netSales: number;
   transactions: number;
   byPaymentMethod: Record<PaymentMethod, number>;
+}
+
+export interface Receipt {
+  company: { name: string; rut: string; address: string };
+  branch: { name: string; address: string };
+  registerName: string;
+  cashierName: string;
+  customer: { name: string; rut: string } | null;
+  document: SalesDocument;
+  lines: { name: string; sku: string; quantity: number; unitPrice: number; subtotal: number; priceSource: PriceSource }[];
+  payments: Payment[];
+  /** Total pagado en efectivo (para calcular vuelto si se ingresó más). */
+  cashPaid: number;
+}
+
+export interface DashboardDay {
+  /** Día en horario de Chile (YYYY-MM-DD). */
+  day: string;
+  /** Ventas menos notas de crédito, IVA incluido. */
+  net: number;
+  transactions: number;
+}
+
+export interface Dashboard {
+  today: DashboardDay;
+  yesterday: DashboardDay;
+  last7Days: DashboardDay[];
+  weekNet: number;
+  topProducts: { variantId: string; name: string; quantity: number; total: number }[];
+  openSessions: { id: string; registerName: string; openedAt: string; initialFund: number; expectedCash: number }[];
+  lowStock: { variantId: string; name: string; sku: string; quantity: number; minQuantity: number }[];
+  lowStockCount: number;
 }
 
 export interface AuditFilters {
@@ -237,6 +275,8 @@ export interface Stock {
   branchId: string;
   variantId: string;
   quantity: number;
+  /** Stock mínimo en la sucursal; null/undefined = sin alerta. */
+  minQuantity?: number | null;
   lastUpdated: string;
 }
 
@@ -384,6 +424,28 @@ export interface Supplier {
   address?: string;
   isActive: boolean;
   businessLine?: string;
+}
+
+export interface PurchaseSearchFilters {
+  query?: string;
+  supplierId?: string;
+  status?: PurchaseInvoiceStatus;
+  from?: string;
+  to?: string;
+  sort?: 'date' | 'amount';
+  offset?: number;
+  limit?: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+}
+
+export interface PurchaseSearchResult extends Paged<PurchaseInvoice> {
+  /** Suma de `total` y cantidad de proveedores distintos sobre todos los resultados, no solo la página. */
+  totalAmount: number;
+  supplierCount: number;
 }
 
 export type PurchaseInvoiceStatus = "DRAFT" | "SII_SENT" | "SII_ACCEPTED" | "SII_REJECTED";

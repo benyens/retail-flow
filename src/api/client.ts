@@ -43,6 +43,8 @@ export interface ApiClient {
   // Auth
   login(credentials: LoginCredentials): Promise<LoginResponse>;
   logout(): Promise<void>;
+  /** Token nuevo (rol y sucursales actuales) para no cortar la sesión mientras se usa. */
+  refreshToken(): Promise<LoginResponse>;
   /** Cambia la contraseña propia. Cierra las demás sesiones y devuelve un token nuevo. */
   changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }>;
   
@@ -104,6 +106,8 @@ export interface ApiClient {
   
   // Stock
   getStock(branchId: string): Promise<Stock[]>;
+  /** Fija el stock mínimo de una variante en la sucursal (null lo quita). Solo ADMIN/MANAGER. */
+  setMinStock(branchId: string, variantId: string, minQuantity: number | null): Promise<Stock>;
   getInventoryMovements(branchId: string): Promise<InventoryMovement[]>;
   getInventoryLines(movementId: string): Promise<InventoryLine[]>;
   createAdjustment(branchId: string, variantId: string, quantity: number, notes: string): Promise<InventoryMovement>;
@@ -128,6 +132,8 @@ export interface ApiClient {
   ): Promise<{ document: SalesDocument; dteRequest: DTERequest }>;
   
   getSales(branchId: string, sessionId?: string): Promise<SalesDocument[]>;
+  /** Datos para imprimir o compartir el comprobante de una venta. */
+  getReceipt(saleId: string): Promise<import('@/types').Receipt>;
   getSaleDetail(saleId: string): Promise<{ document: SalesDocument; lines: SalesLine[]; payments: Payment[]; dte: DTERequest | null }>;
   
   voidSaleInternal(saleId: string, reason: string): Promise<SalesDocument>;
@@ -146,6 +152,8 @@ export interface ApiClient {
   updateSupplier(id: string, supplier: Partial<Supplier>): Promise<Supplier>;
   
   getPurchases(branchId: string): Promise<PurchaseInvoice[]>;
+  /** Búsqueda paginada en el servidor (listado de facturas). */
+  searchPurchases(branchId: string, filters: import('@/types').PurchaseSearchFilters): Promise<import('@/types').PurchaseSearchResult>;
   createPurchase(
     branchId: string,
     supplierId: string,
@@ -180,6 +188,8 @@ export interface ApiClient {
   
   // Reports
   getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport>;
+  /** Resumen de la pantalla de inicio (ADMIN/MANAGER). */
+  getDashboard(branchId: string): Promise<import('@/types').Dashboard>;
   getDailySalesReport(branchId: string, date: string): Promise<DailySalesReport>;
   
   // Audit

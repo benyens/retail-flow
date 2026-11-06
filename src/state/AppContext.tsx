@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
+import { needsRefresh } from '@/utils/session';
 import type { User, AuthState, Branch, CashRegister, CashSession } from '@/types';
 import { apiClient } from '@/api';
 
@@ -164,6 +165,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     apiClient.logout().catch(() => undefined).finally(clearSession);
   }, [clearSession]);
+
+  // Renovación del token: el cliente HTTP la hace al usar la API; esto cubre la pestaña
+  // abierta sin uso (al volver a ella y cada 15 min) y actualiza rol/sucursales.
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    const check = () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token || !needsRefresh(token) || document.visibilityState === 'hidden') return;
+      apiClient.refreshToken().then((res) => {
+        if (localStorage.getItem('auth_token') !== token) return;
+        localStorage.setItem('auth_token', res.token);
+        setAuth({ user: res.user, token: res.token, isAuthenticated: true });
+      }).catch(() => undefined);
+    };
+    const onRefreshed = (e: Event) => {
+      const res = (e as CustomEvent<{ token: string; user: User }>).detail;
+      setAuth({ user: res.user, token: res.token, isAuthenticated: true });
+    };
+    check();
+    const timer = window.setInterval(check, 15 * 60 * 1000);
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('auth:refreshed', onRefreshed);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('auth:refreshed', onRefreshed);
+    };
+  }, [auth.isAuthenticated]);
 
   useEffect(() => {
     const onExpired = () => {

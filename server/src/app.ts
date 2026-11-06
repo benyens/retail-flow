@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import rateLimit from '@fastify/rate-limit';
 import prismaPlugin from "./plugins/prisma.js";
 import authPlugin from "./plugins/auth.js";
+import auditTrail from "./plugins/audit-trail.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { lookupsRoutes } from "./modules/lookups/lookups.routes.js";
 import { catalogRoutes } from "./modules/catalog/catalog.routes.js";
@@ -84,6 +85,7 @@ export async function buildApp() {
   await app.register(rateLimit, { global: false, max: 10, timeWindow: '1 minute' });
   await app.register(prismaPlugin);
   await app.register(authPlugin);
+  await app.register(auditTrail); // antes de las rutas: agrega su hook onRoute
   await app.register(authRoutes);
   await app.register(lookupsRoutes);
   await app.register(catalogRoutes);

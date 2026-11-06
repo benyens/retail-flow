@@ -356,8 +356,7 @@ export default function ProductCatalogPage() {
           barcode:
             productForm.autoBarcode.trim() || undefined,
           isActive: true,
-          // Nota: agrega lastPurchaseCost a Variant si quieres costear también la variante auto
-          lastPurchaseCost: undefined as any,
+          lastPurchaseCost: undefined,
         };
 
         const created = await apiClient.createVariant(
@@ -503,8 +502,7 @@ export default function ProductCatalogPage() {
   };
 
   const handleSelectVariant = (v: VariantWithProduct) => {
-    const costRaw = (v as any)
-      .lastPurchaseCost as number | undefined;
+    const costRaw = v.lastPurchaseCost;
     setVariantForm({
       id: v.id,
       sku: v.sku,
@@ -577,7 +575,7 @@ export default function ProductCatalogPage() {
           typeof costNumber === "number" &&
           isFinite(costNumber) &&
           costNumber > 0
-            ? (costNumber as any)
+            ? costNumber
             : undefined,
       };
 
@@ -1026,10 +1024,7 @@ export default function ProductCatalogPage() {
                     </TableHeader>
                     <TableBody>
                       {productVariants.map((v) => {
-                        const costRaw = (v as any)
-                          .lastPurchaseCost as
-                          | number
-                          | undefined;
+                        const costRaw = v.lastPurchaseCost;
                         const cost =
                           typeof costRaw === "number"
                             ? costRaw

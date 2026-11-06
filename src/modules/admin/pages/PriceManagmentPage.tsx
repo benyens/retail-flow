@@ -472,9 +472,7 @@ export default function PriceManagementPage() {
                         ? Number(draft)
                         : price?.price ?? 0;
 
-                    // Nota: agrega lastPurchaseCost a Variant/VariantWithProduct
-                    const costRaw = (v as any)
-                      .lastPurchaseCost as number | undefined;
+                    const costRaw = v.lastPurchaseCost;
                     const cost =
                       typeof costRaw === "number" &&
                       costRaw > 0

@@ -441,7 +441,8 @@ export default function PurchaseEntryPage() {
         phone: newSupplierPhone.trim() || undefined,
         address: newSupplierAddress.trim() || undefined,
         businessLine: newSupplierBusinessLine.trim() || undefined,
-      } as any);
+        isActive: true,
+      });
 
       // ⚠️ para evitar duplicados, recargamos desde el backend
       const ss = await apiClient.getSuppliers();

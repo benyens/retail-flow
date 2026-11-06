@@ -183,3 +183,31 @@
     border-radius: 3px;
   }
 }
+
+/*
+ * Tablas como tarjetas en celular: en pantallas chicas cada fila se muestra como una
+ * tarjeta y cada celda con su etiqueta (atributo data-label). Celdas con data-label=""
+ * ocupan el ancho completo (acciones). En md y más es una tabla normal.
+ */
+@media (max-width: 767px) {
+  table.table-cards thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  table.table-cards, table.table-cards tbody { display: block; width: 100%; }
+  table.table-cards tr {
+    display: block; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+    padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; background: hsl(var(--card));
+  }
+  table.table-cards td {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    padding: 0.25rem 0; border: 0; text-align: right;
+  }
+  table.table-cards td::before {
+    content: attr(data-label); flex-shrink: 0; text-align: left;
+    color: hsl(var(--muted-foreground)); font-size: 0.75rem;
+  }
+  table.table-cards td[data-label=""] { justify-content: flex-end; padding-top: 0.5rem; }
+  table.table-cards td[data-label=""]::before { content: none; }
+  table.table-cards td[colspan] { justify-content: center; text-align: center; }
+  table.table-cards td[colspan]::before { content: none; }
+}

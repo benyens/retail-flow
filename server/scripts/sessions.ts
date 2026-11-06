@@ -23,6 +23,23 @@ try {
     const response = await other.inject({ method: 'GET', url: '/api/v1/branches', headers: { authorization: `Bearer ${first}` } });
     assert.equal(response.statusCode, 401);
   } finally { await other.close(); }
+  // Renovación: token nuevo con authTime conservado; el revocado no puede renovar;
+  // pasado el tope desde el login original se exige la contraseña.
+  const refreshed = await request(second, 'POST', '/auth/refresh');
+  assert.equal(refreshed.statusCode, 200);
+  const renewed = refreshed.json().token as string;
+  assert.notEqual(renewed, second);
+  const claims = (t: string) => app.jwt.decode<{ authTime: number; role: string }>(t)!;
+  assert.equal(claims(renewed).authTime, claims(second).authTime);
+  assert.equal(refreshed.json().user.role, 'ADMIN');
+  assert.equal((await request(renewed, 'GET', '/branches')).statusCode, 200);
+  assert.equal((await request(first, 'POST', '/auth/refresh')).statusCode, 401);
+  const old = claims(second);
+  const stale = app.jwt.sign({ ...old, jti: 'stale-session', authTime: Math.floor(Date.now() / 1000) - 8 * 24 * 3600 } as never, { expiresIn: '1h' });
+  const tooOld = await request(stale, 'POST', '/auth/refresh');
+  assert.equal(tooOld.statusCode, 401);
+  assert.equal(tooOld.json().error, 'SESSION_TOO_OLD');
   assert.equal((await request(second, 'POST', '/auth/logout')).statusCode, 200);
-  console.log('SESSIONS OK: independent logins, revoked-token rejection and cross-instance persistence');
+  assert.equal((await request(renewed, 'POST', '/auth/logout')).statusCode, 200);
+  console.log('SESSIONS OK: independent logins, revocation, cross-instance persistence and token refresh');
 } finally { await app.close(); }

@@ -196,6 +196,38 @@ export class SaleService {
     };
   }
 
+  /** Todo lo necesario para imprimir o compartir el comprobante de una venta. */
+  async getReceipt(saleId: string) {
+    const doc = await this.prisma.salesDocument.findUniqueOrThrow({
+      where: { id: saleId },
+      include: {
+        branch: { include: { company: true } }, customer: true,
+        cashSession: { include: { cashRegister: true } },
+        lines: true, payments: true,
+      },
+    });
+    const [cashier, variants] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: doc.createdBy }, select: { name: true } }),
+      this.prisma.variant.findMany({ where: { id: { in: doc.lines.map(l => l.variantId) } }, include: { product: true } }),
+    ]);
+    const variantMap = new Map(variants.map(v => [v.id, v]));
+    const cashPaid = doc.payments.filter(p => p.method === 'CASH').reduce((n, p) => n + Number(p.amount), 0);
+    return {
+      company: { name: doc.branch.company.name, rut: doc.branch.company.rut, address: doc.branch.company.address },
+      branch: { name: doc.branch.name, address: doc.branch.address },
+      registerName: doc.cashSession.cashRegister.name, cashierName: cashier?.name ?? '',
+      customer: doc.customer ? { name: doc.customer.name, rut: doc.customer.rut } : null,
+      document: toSalesDocumentDTO(doc),
+      lines: doc.lines.map(l => {
+        const v = variantMap.get(l.variantId);
+        return {
+        name: !v ? l.variantId : v.name && v.name !== 'Única' ? `${v.product.name} · ${v.name}` : v.product.name,
+        sku: v?.sku ?? '', quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), subtotal: Number(l.subtotal), priceSource: l.priceSource,
+      }; }),
+      payments: doc.payments.map(toPaymentDTO), cashPaid,
+    };
+  }
+
   async voidSaleInternal(saleId: string, reason: string, voidedBy: string) {
     return this.prisma.$transaction(async (tx) => {
       const original = await tx.salesDocument.findUniqueOrThrow({ where: { id: saleId } });

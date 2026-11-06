@@ -86,20 +86,20 @@ export default function EmployeesPage() {
           </DialogContent>
         </Dialog>
       </div>
-      <Card>
+      <Card className="border-0 shadow-none md:border md:shadow-sm bg-transparent md:bg-card">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>RUT</TableHead><TableHead>Cargo</TableHead><TableHead>Estado</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
+          <Table className="table-cards">
+            <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>RUT</TableHead><TableHead>Cargo</TableHead><TableHead>Estado</TableHead><TableHead className="w-16"><span className="sr-only">Acciones</span></TableHead></TableRow></TableHeader>
             <TableBody>
               {isLoading && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Cargando…</TableCell></TableRow>}
               {!isLoading && employees.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Sin empleados registrados.</TableCell></TableRow>}
               {employees.map((emp) => (
                 <TableRow key={emp.id}>
-                  <TableCell className="font-medium">{emp.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{emp.rut}</TableCell>
-                  <TableCell>{emp.position}</TableCell>
-                  <TableCell><Badge variant={emp.isActive ? "default" : "secondary"}>{emp.isActive ? "Activo" : "Inactivo"}</Badge></TableCell>
-                  <TableCell><Button variant="ghost" size="sm" onClick={() => openEdit(emp)}><Edit2 className="h-4 w-4" /></Button></TableCell>
+                  <TableCell data-label="Nombre" className="font-medium">{emp.name}</TableCell>
+                  <TableCell data-label="RUT" className="text-muted-foreground">{emp.rut}</TableCell>
+                  <TableCell data-label="Cargo">{emp.position}</TableCell>
+                  <TableCell data-label="Estado"><Badge variant={emp.isActive ? "default" : "secondary"}>{emp.isActive ? "Activo" : "Inactivo"}</Badge></TableCell>
+                  <TableCell data-label=""><Button variant="ghost" size="sm" onClick={() => openEdit(emp)} aria-label={`Editar a ${emp.name}`}><Edit2 className="h-4 w-4" aria-hidden="true" /><span className="md:sr-only ml-1">Editar</span></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>

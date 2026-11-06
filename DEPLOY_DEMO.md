@@ -41,8 +41,11 @@ Contraseñas (mínimo 10 caracteres): cada usuario la cambia en el menú → **C
 
 ## Notas
 - Render Free duerme tras ~15 min: el primer acceso tarda hasta ~1 min (el login hace un ping de despertar). Para una presentación, abre `/health` unos minutos antes.
-- Las migraciones nuevas (p. ej. `20261105120000_password_management`) se aplican solas al desplegar en Render (`migrate deploy` en el arranque).
+- Las migraciones nuevas (p. ej. `20261105120000_password_management`, `20261106090000_stock_minimum`) se aplican solas al desplegar en Render (`migrate deploy` en el arranque).
 - `TRUST_PROXY_HOPS` (opcional, por defecto `1`): cuántos proxies hay delante de la API. Si en los logs todas las IPs de login aparecen iguales, el límite por IP estaría agrupando a todos; súbelo a `2`. El límite por cuenta funciona igual.
 - El CSP de `vercel.json` permite llamar solo a `*.onrender.com`. Si mueves la API a otro dominio, agrégalo en `connect-src`.
 - En celular el menú se abre con el botón ☰ arriba a la izquierda; en el POS se alterna entre **Productos** y **Carrito** con la barra inferior.
+- El escáner de códigos usa la cámara: funciona solo en HTTPS (Vercel lo es) y el navegador pide permiso la primera vez. En iPhone usa una librería que se descarga al abrir el escáner.
+- El comprobante (`/comprobante/:id`, botón **Comprobante** en Ventas o tras cobrar) se imprime en térmica de 58/80 mm o se guarda como PDF desde Imprimir. **No es un documento tributario.** Nombre, RUT y dirección salen de la tabla `companies` / `branches` (hoy los del seed: edítalos en Neon > SQL Editor).
+- La sesión se renueva sola mientras se usa la app; a los 7 días desde el login pide la contraseña de nuevo.
 - DTE simulado y datos ficticios: es una demo.

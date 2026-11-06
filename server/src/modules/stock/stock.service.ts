@@ -1,12 +1,35 @@
 import { AuditService } from "../reports/audit.service.js";
 import type { PrismaClient } from "@prisma/client";
 
+function toStockDTO(s: { branchId: string; variantId: string; quantity: unknown; minQuantity: unknown; lastUpdated: Date }) {
+  return { branchId: s.branchId, variantId: s.variantId, quantity: Number(s.quantity),
+    minQuantity: s.minQuantity == null ? null : Number(s.minQuantity), lastUpdated: s.lastUpdated.toISOString() };
+}
+
 export class StockService {
   constructor(private readonly prisma: PrismaClient) {}
 
   async getStock(branchId: string) {
     const stocks = await this.prisma.stock.findMany({ where: { branchId } });
-    return stocks.map((s) => ({ branchId: s.branchId, variantId: s.variantId, quantity: Number(s.quantity), lastUpdated: s.lastUpdated.toISOString() }));
+    return stocks.map(toStockDTO);
+  }
+
+  /** Fija (o quita con null) el stock mínimo de una variante en una sucursal. */
+  async setMinStock(branchId: string, variantId: string, minQuantity: number | null, performedBy: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.stock.findUnique({ where: { branchId_variantId: { branchId, variantId } } });
+      const saved = await tx.stock.upsert({
+        where: { branchId_variantId: { branchId, variantId } },
+        create: { branchId, variantId, quantity: 0, minQuantity },
+        update: { minQuantity },
+      });
+      await AuditService.log(tx, {
+        userId: performedBy, action: "SET_MIN_STOCK", entityType: "Variant", entityId: variantId,
+        beforeData: { branchId, minQuantity: before?.minQuantity == null ? null : Number(before.minQuantity) },
+        afterData: { branchId, minQuantity },
+      });
+      return toStockDTO(saved);
+    });
   }
 
   async getStockByVariant(variantId: string, branchIds: string[]) {

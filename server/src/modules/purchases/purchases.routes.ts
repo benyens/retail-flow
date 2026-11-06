@@ -43,6 +43,20 @@ export async function purchasesRoutes(fastify: FastifyInstance) {
     if (!branchId) return reply.status(422).send({ error: "VALIDATION_ERROR", message: "branchId es requerido" });
     return service.listPurchases(branchId);
   });
+  const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado: YYYY-MM-DD");
+  const searchSchema = z.object({
+    branchId: z.string().min(1), query: z.string().max(200).optional(), supplierId: z.string().optional(),
+    status: z.enum(["DRAFT", "SII_SENT", "SII_ACCEPTED", "SII_REJECTED"]).optional(),
+    from: isoDay.optional(), to: isoDay.optional(), sort: z.enum(["date", "amount"]).default("date"),
+    offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+    limit: z.coerce.number().int().min(1).max(5000).default(25),
+  });
+  fastify.get("/api/v1/purchases/search", { preHandler: ro }, async (request, reply) => {
+    const parsed = searchSchema.safeParse(request.query);
+    if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });
+    const { branchId, ...filters } = parsed.data;
+    return service.searchPurchases(branchId, filters);
+  });
   fastify.post("/api/v1/purchases", { preHandler: rw }, async (request, reply) => {
     const parsed = createPurchaseSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });

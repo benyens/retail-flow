@@ -186,6 +186,8 @@ model Stock {
   branchId    String
   variantId   String
   quantity    Decimal  @db.Decimal(12, 3)
+  /// Stock mínimo en esta sucursal; null = sin alerta. Bajo o igual a esto, "por reponer".
+  minQuantity Decimal? @db.Decimal(12, 3)
   lastUpdated DateTime @updatedAt
 
   branch  Branch  @relation(fields: [branchId], references: [id])

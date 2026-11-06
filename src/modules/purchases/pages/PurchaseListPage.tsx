@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { apiClient } from '@/api';
 import { useApp } from '@/state/AppContext';
 import { formatCurrency } from '@/utils/format';
@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Filter, Pager, selectClass, exportCsv } from '@/components/ui/data-tools';
-import type { PurchaseInvoice } from '@/types';
+import type { PurchaseInvoice, PurchaseInvoiceStatus, PurchaseSearchFilters } from '@/types';
 import { toast } from 'sonner';
 import { Plus, Receipt, Download } from 'lucide-react';
 
+const PAGE = 25;
 const statuses = { DRAFT: 'Registrada', SII_SENT: 'En proceso (simulado)', SII_ACCEPTED: 'Aceptada (simulado)', SII_REJECTED: 'Rechazada (simulado)' };
 export default function PurchaseListPage() {
   const { selectedBranch } = useApp();
@@ -28,20 +29,31 @@ export default function PurchaseListPage() {
   const [date, setDate] = useState('');
   const [notes, setNotes] = useState('');
   const cache = useQueryClient();
-  const purchases = useQuery({ queryKey: ['purchases', selectedBranch?.id], queryFn: () => apiClient.getPurchases(selectedBranch!.id), enabled: !!selectedBranch });
+  const invalidRange = !!from && !!to && from > to;
+  const filters: PurchaseSearchFilters = { query: query.trim() || undefined, supplierId: supplier || undefined, status: (status || undefined) as PurchaseInvoiceStatus | undefined,
+    from: from || undefined, to: to || undefined, sort: sort as 'date' | 'amount' };
+  const purchases = useQuery({ queryKey: ['purchases', selectedBranch?.id, filters, page], placeholderData: keepPreviousData,
+    queryFn: () => apiClient.searchPurchases(selectedBranch!.id, { ...filters, offset: page * PAGE, limit: PAGE }), enabled: !!selectedBranch && !invalidRange });
+  const [exporting, setExporting] = useState(false);
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const all = await apiClient.searchPurchases(selectedBranch!.id, { ...filters, offset: 0, limit: 5000 });
+      exportCsv('facturas.csv', [['Factura', 'Proveedor', 'RUT', 'Fecha', 'Neto', 'IVA', 'Total', 'Estado'], ...all.items.map(i => [i.invoiceNumber, supplierMap.get(i.supplierId)?.name, supplierMap.get(i.supplierId)?.rut, i.invoiceDate, i.subtotal, i.tax, i.total, statuses[i.status]])]);
+      if (all.total > all.items.length) toast.warning(`Se exportaron ${all.items.length} de ${all.total} facturas. Acota los filtros para exportar el resto.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo exportar');
+    } finally {
+      setExporting(false);
+    }
+  };
   const suppliers = useQuery({ queryKey: ['suppliers'], queryFn: () => apiClient.getSuppliers() });
   const variants = useQuery({ queryKey: ['purchase-variants', selectedBranch?.id], queryFn: () => apiClient.getVariants(selectedBranch!.id), enabled: !!detail && !!selectedBranch });
   const lines = useQuery({ queryKey: ['purchase-lines', detail?.id], queryFn: () => apiClient.getPurchaseLines(detail!.id), enabled: !!detail });
   useEffect(() => { setDetail(null); setPage(0); }, [selectedBranch?.id]);
   const supplierMap = useMemo(() => new Map((suppliers.data ?? []).map(s => [s.id, s])), [suppliers.data]);
-  const invalidRange = !!from && !!to && from > to;
-  const filtered = useMemo(() => (purchases.data ?? []).filter(i => {
-    const s = supplierMap.get(i.supplierId);
-    return !invalidRange && (!supplier || i.supplierId === supplier) && (!status || i.status === status) &&
-      (!from || i.invoiceDate.slice(0, 10) >= from) && (!to || i.invoiceDate.slice(0, 10) <= to) &&
-      `${i.invoiceNumber} ${s?.name ?? ''} ${s?.rut ?? ''}`.toLowerCase().includes(query.trim().toLowerCase());
-  }).sort((a, b) => sort === 'amount' ? b.total - a.total : b.invoiceDate.localeCompare(a.invoiceDate)),
-  [purchases.data, supplierMap, supplier, status, from, to, query, sort, invalidRange]);
+  const result = invalidRange ? undefined : purchases.data;
+  const filtered = result?.items ?? [];
   useEffect(() => setPage(0), [query, supplier, from, to, status, sort]);
   const save = useMutation({ mutationFn: () => apiClient.updatePurchaseInvoice(detail!.id, { invoiceNumber: number.trim(), invoiceDate: date, notes }),
     onSuccess: updated => { setDetail(updated); cache.invalidateQueries({ queryKey: ['purchases'] }); toast.success('Factura actualizada'); },
@@ -64,12 +76,12 @@ export default function PurchaseListPage() {
       {invalidRange && <p role="alert" className="text-destructive">La fecha inicial debe ser anterior o igual a la final.</p>}
     </CardContent></Card>
     {(purchases.isError || suppliers.isError) && <p role="alert" className="text-destructive">No se pudieron cargar los datos. <Button variant="outline" onClick={() => { purchases.refetch(); suppliers.refetch(); }}>Reintentar</Button></p>}
-    <div className="flex flex-wrap justify-between gap-3 items-center"><p className="font-medium">Total filtrado: {formatCurrency(filtered.reduce((s, i) => s + i.total, 0))} · {new Set(filtered.map(i => i.supplierId)).size} proveedores</p>
-      <Button variant="outline" disabled={!filtered.length} onClick={() => exportCsv('facturas.csv', [['Factura', 'Proveedor', 'RUT', 'Fecha', 'Neto', 'IVA', 'Total', 'Estado'], ...filtered.map(i => [i.invoiceNumber, supplierMap.get(i.supplierId)?.name, supplierMap.get(i.supplierId)?.rut, i.invoiceDate, i.subtotal, i.tax, i.total, statuses[i.status]])])}><Download className="mr-2 h-4 w-4" />Exportar resultados</Button></div>
-    <div className="rounded-lg border overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted"><tr>{['Factura', 'Proveedor', 'Fecha', 'Total', 'Estado', 'Detalle'].map(h => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>
-      {purchases.isPending ? <tr><td colSpan={6} className="p-8 text-center">Cargando…</td></tr> : filtered.slice(page * 25, (page + 1) * 25).map(i => <tr key={i.id} className="border-t"><td className="p-3 font-medium">{i.invoiceNumber}</td><td className="p-3">{supplierMap.get(i.supplierId)?.name}<div className="text-xs text-muted-foreground">{supplierMap.get(i.supplierId)?.rut}</div></td><td className="p-3">{i.invoiceDate.slice(0, 10)}</td><td className="p-3 tabular-nums">{formatCurrency(i.total)}</td><td className="p-3">{statuses[i.status]}</td><td className="p-3"><Button variant="outline" size="sm" onClick={() => open(i)} aria-label={`Ver factura ${i.invoiceNumber}`}>Ver detalle</Button></td></tr>)}
+    <div className="flex flex-wrap justify-between gap-3 items-center"><p className="font-medium tabular-nums">Total filtrado: {formatCurrency(result?.totalAmount ?? 0)} · {result?.supplierCount ?? 0} proveedores</p>
+      <Button variant="outline" disabled={!result?.total || exporting} onClick={exportAll}><Download className="mr-2 h-4 w-4" aria-hidden="true" />{exporting ? 'Exportando…' : 'Exportar resultados'}</Button></div>
+    <div className="md:rounded-lg md:border md:overflow-x-auto"><table className="table-cards w-full text-sm"><thead className="bg-muted"><tr>{['Factura', 'Proveedor', 'Fecha', 'Total', 'Estado', 'Detalle'].map(h => <th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>
+      {purchases.isPending ? <tr><td colSpan={6} className="p-8 text-center">Cargando…</td></tr> : filtered.map(i => <tr key={i.id} className="border-t"><td data-label="Factura" className="p-3 font-medium">{i.invoiceNumber}</td><td data-label="Proveedor" className="p-3">{supplierMap.get(i.supplierId)?.name}<div className="text-xs text-muted-foreground">{supplierMap.get(i.supplierId)?.rut}</div></td><td data-label="Fecha" className="p-3">{i.invoiceDate.slice(0, 10)}</td><td data-label="Total" className="p-3 tabular-nums">{formatCurrency(i.total)}</td><td data-label="Estado" className="p-3">{statuses[i.status]}</td><td data-label="" className="p-3"><Button variant="outline" size="sm" onClick={() => open(i)} aria-label={`Ver factura ${i.invoiceNumber}`}>Ver detalle</Button></td></tr>)}
       {!purchases.isPending && !purchases.isError && !filtered.length && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No hay facturas para estos filtros.</td></tr>}
-    </tbody></table></div><Pager page={page} count={filtered.length} onChange={setPage} />
+    </tbody></table></div><Pager page={page} count={result?.total ?? 0} size={PAGE} onChange={setPage} />
     <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>Factura {detail?.invoiceNumber}</DialogTitle><DialogDescription>{selectedSupplier?.name} · {selectedSupplier?.rut}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{selectedSupplier?.email} {selectedSupplier?.phone} {selectedSupplier?.address}</p>
       {lines.isPending ? <p>Cargando detalle…</p> : lines.isError ? <p role="alert">No se pudo cargar el detalle.</p> : <table className="text-sm w-full"><thead><tr><th className="text-left">Producto</th><th>Cantidad</th><th>Costo neto</th><th>Subtotal</th></tr></thead><tbody>{lines.data?.map(l => { const v = variants.data?.find(v => v.id === l.variantId); return <tr key={l.id} className="border-t"><td className="py-3">{v ? `${v.product.name} · ${v.name}` : l.variantId}</td><td className="text-center">{l.quantity}</td><td className="text-center">{formatCurrency(l.unitCost)}</td><td className="text-center">{formatCurrency(l.subtotal)}</td></tr>; })}</tbody></table>}

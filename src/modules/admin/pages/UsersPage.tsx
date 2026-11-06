@@ -129,23 +129,23 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
       </div>
-      <Card>
+      <Card className="border-0 shadow-none md:border md:shadow-sm bg-transparent md:bg-card">
         <CardContent className="p-0">
-          <Table>
+          <Table className="table-cards">
             <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Email</TableHead><TableHead>Rol</TableHead><TableHead>Sucursales</TableHead><TableHead>Estado</TableHead><TableHead><span className="sr-only">Acciones</span></TableHead></TableRow></TableHeader>
             <TableBody>
               {isLoading && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Cargando…</TableCell></TableRow>}
               {!isLoading && users.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Sin usuarios.</TableCell></TableRow>}
               {users.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell className="font-medium">{u.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                  <TableCell>{ROLE_LABELS[u.role]}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{u.branchIds.map((id) => branches.find((b) => b.id === id)?.name ?? id).join(", ") || "—"}</TableCell>
-                  <TableCell><Badge variant={u.isActive ? "default" : "secondary"}>{u.isActive ? "Activo" : "Inactivo"}</Badge></TableCell>
-                  <TableCell className="text-right whitespace-nowrap space-x-2">
+                  <TableCell data-label="Nombre" className="font-medium">{u.name}</TableCell>
+                  <TableCell data-label="Correo" className="text-muted-foreground break-all">{u.email}</TableCell>
+                  <TableCell data-label="Rol">{ROLE_LABELS[u.role]}</TableCell>
+                  <TableCell data-label="Sucursales" className="text-muted-foreground text-sm">{u.branchIds.map((id) => branches.find((b) => b.id === id)?.name ?? id).join(", ") || "—"}</TableCell>
+                  <TableCell data-label="Estado"><Badge variant={u.isActive ? "default" : "secondary"}>{u.isActive ? "Activo" : "Inactivo"}</Badge></TableCell>
+                  <TableCell data-label="" className="text-right whitespace-nowrap space-x-2">
                     <Button size="sm" variant="outline" onClick={() => { setResetUser(u); setResetPassword(""); }} aria-label={`Cambiar contraseña de ${u.name}`}>
-                      <KeyRound className="h-4 w-4 md:mr-1" aria-hidden="true" /><span className="hidden md:inline">Contraseña</span>
+                      <KeyRound className="h-4 w-4 mr-1" aria-hidden="true" />Contraseña
                     </Button>
                     {u.id !== auth.user?.id && (
                       <Button size="sm" variant="ghost" onClick={() => toggleActive(u)}>{u.isActive ? "Desactivar" : "Activar"}</Button>

@@ -23,6 +23,11 @@ const changePasswordSchema = z.object({
 
 // Hash fijo para comparar cuando el usuario no existe: el login tarda lo mismo
 // exista o no la cuenta, y así no se pueden enumerar correos por tiempo de respuesta.
+/** Duración de cada token. El cliente lo renueva antes de que venza mientras se usa. */
+export const TOKEN_TTL = "12h";
+/** Tope desde el login original: pasado esto hay que volver a ingresar la contraseña. */
+export const MAX_SESSION_SECONDS = 7 * 24 * 60 * 60;
+
 const DUMMY_HASH = bcrypt.hashSync("retail-flow-dummy-password", BCRYPT_COST);
 const INVALID = { error: "INVALID_CREDENTIALS", message: "Correo o contraseña incorrectos" };
 
@@ -59,8 +64,9 @@ export async function authRoutes(fastify: FastifyInstance) {
     const branchIds = user.branches.filter((b) => b.branch.isActive).map((b) => b.branchId);
 
     const token = fastify.jwt.sign(
-      { jti: randomUUID(), sub: user.id, email: user.email, name: user.name, rut: user.rut, role: user.role, branchIds },
-      { expiresIn: "12h" },
+      { jti: randomUUID(), sub: user.id, email: user.email, name: user.name, rut: user.rut, role: user.role, branchIds,
+        authTime: Math.floor(Date.now() / 1000) },
+      { expiresIn: TOKEN_TTL },
     );
 
     return {
@@ -75,6 +81,27 @@ export async function authRoutes(fastify: FastifyInstance) {
         isActive: user.isActive,
       },
     };
+  });
+
+  // Renovación: entrega un token nuevo con rol y sucursales actuales, sin pedir la
+  // contraseña, hasta MAX_SESSION_SECONDS desde el login. `authenticate` ya rechazó
+  // tokens revocados, de usuarios inactivos o anteriores a un cambio de contraseña.
+  // El token anterior no se revoca: así no fallan peticiones en curso, y vence solo.
+  fastify.post("/api/v1/auth/refresh", {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const authTime = request.user.authTime ?? request.user.iat ?? 0;
+    if (Date.now() / 1000 - authTime > MAX_SESSION_SECONDS) {
+      return reply.status(401).send({ error: "SESSION_TOO_OLD", message: "Por seguridad, vuelve a ingresar tu contraseña" });
+    }
+    const user = await fastify.prisma.user.findUniqueOrThrow({ where: { id: request.user.sub } });
+    const { branchIds, role } = request.user; // ya actualizados desde la base en authenticate
+    const token = fastify.jwt.sign(
+      { jti: randomUUID(), sub: user.id, email: user.email, name: user.name, rut: user.rut, role, branchIds, authTime },
+      { expiresIn: TOKEN_TTL },
+    );
+    return { token, user: { id: user.id, email: user.email, name: user.name, rut: user.rut, role, branchIds, isActive: user.isActive } };
   });
 
   fastify.post("/api/v1/auth/logout", { preHandler: [fastify.authenticate] }, async (request) => {
@@ -112,7 +139,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       await AuditService.log(tx, { userId: user.id, action: "CHANGE_OWN_PASSWORD", entityType: "User", entityId: user.id });
     });
     const { sub, email, name, rut, role, branchIds } = request.user;
-    const token = fastify.jwt.sign({ jti: randomUUID(), sub, email, name, rut, role, branchIds }, { expiresIn: "12h" });
+    const authTime = request.user.authTime ?? request.user.iat;
+    const token = fastify.jwt.sign({ jti: randomUUID(), sub, email, name, rut, role, branchIds, authTime }, { expiresIn: TOKEN_TTL });
     return { token };
   });
 }

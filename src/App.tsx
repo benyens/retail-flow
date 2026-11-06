@@ -1,4 +1,4 @@
-import { lazy, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,6 +23,8 @@ const PurchaseListPage = lazy(() => import("@/modules/purchases/pages/PurchaseLi
 const ReportsPage = lazy(() => import("@/modules/admin/pages/ReportsPage"));
 const StockPage = lazy(() => import("@/modules/admin/pages/StockPage"));
 const EmployeesPage = lazy(() => import("@/modules/admin/pages/EmployeesPage"));
+const ReceiptPage = lazy(() => import("@/pages/ReceiptPage"));
+const DashboardPage = lazy(() => import("@/modules/admin/pages/DashboardPage"));
 const UsersPage = lazy(() => import("@/modules/admin/pages/UsersPage"));
 
 const queryClient = new QueryClient();
@@ -47,7 +49,7 @@ function AppRoutes() {
   const location = useLocation();
   // Tras iniciar sesión vuelve a la página que se intentaba abrir (solo rutas internas).
   const from = (location.state as { from?: string } | null)?.from;
-  const redirectAfterLogin = from && from.startsWith('/') && !from.startsWith('//') && from !== '/login' ? from : '/pos';
+  const redirectAfterLogin = from && from.startsWith('/') && !from.startsWith('//') && from !== '/login' ? from : '/';
   const previousUser = useRef(auth.user?.id);
   useEffect(() => { if (previousUser.current !== auth.user?.id) { queryClient.clear(); previousUser.current = auth.user?.id; } }, [auth.user?.id]);
 
@@ -57,12 +59,22 @@ function AppRoutes() {
         auth.isAuthenticated ? <Navigate to={redirectAfterLogin} replace /> : <LoginPage />
       } />
       
+      {/* Fuera del menú lateral para que la impresión salga limpia. */}
+      <Route path="/comprobante/:id" element={
+        <ProtectedRoute>
+          <Suspense fallback={<p role="status" className="p-6 text-sm text-muted-foreground">Cargando…</p>}>
+            <ReceiptPage />
+          </Suspense>
+        </ProtectedRoute>
+      } />
+
       <Route path="/" element={
         <ProtectedRoute>
           <MainLayout />
         </ProtectedRoute>
       }>
-        <Route index element={<Navigate to="/pos" replace />} />
+        {/* Administración entra al resumen; cajeros, directo a vender. */}
+        <Route index element={<Navigate to={auth.user?.role === 'CASHIER' ? '/pos' : '/inicio'} replace />} />
         <Route path="pos" element={<POSPage />} />
 
         {/* aquí usamos la página de historial de ventas */}
@@ -73,6 +85,7 @@ function AppRoutes() {
         <Route path="pos/cerrar" element={<CashClosePage />} />
     
         <Route element={<AdminRoute />}>
+        <Route path="inicio" element={<DashboardPage />} />
         <Route path="admin/catalogo" element={<ProductCatalogPage />} />
         <Route path="admin/precios" element={<PriceManagementPage />} />
         <Route path="admin/mayorista" element={<WholesalePage />} />

@@ -81,6 +81,20 @@ function generateAutoSku(productName: string, variantName?: string): string {
 
 export class MockApiClient implements ApiClient {
   async getPriceLists() { return [...PRICE_LISTS]; }
+  async getDashboard(branchId: string): Promise<import('@/types').Dashboard> {
+    const chileDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    const days = Array.from({ length: 7 }, (_, i) => chileDay(new Date(Date.now() - (6 - i) * 86400000)));
+    const reports = await Promise.all(days.map(day => this.getSalesReport(branchId, { from: day, to: day, limit: 0 })));
+    const last7Days = days.map((day, i) => ({ day, net: reports[i].netSales, transactions: reports[i].transactions }));
+    const stock = mockState.stock.filter(s => s.branchId === branchId && s.minQuantity != null && s.quantity <= s.minQuantity);
+    const lowStock = stock.map(s => {
+      const v = mockState.variants.find(v => v.id === s.variantId);
+      return { variantId: s.variantId, name: v?.name ?? s.variantId, sku: v?.sku ?? '', quantity: s.quantity, minQuantity: s.minQuantity ?? 0 };
+    });
+    return { today: last7Days[6], yesterday: last7Days[5], last7Days, weekNet: last7Days.reduce((n, d) => n + d.net, 0),
+      topProducts: [], openSessions: [], lowStock: lowStock.slice(0, 10), lowStockCount: lowStock.length };
+  }
+
   async getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport> {
     const documents = mockState.salesDocuments.filter(d => {
       const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d.createdAt));
@@ -91,13 +105,17 @@ export class MockApiClient implements ApiClient {
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     let grossSales = 0, refunds = 0, transactions = 0;
     const byPaymentMethod = { CASH: 0, CARD: 0, TRANSFER: 0, CHECK: 0, OTHER: 0 };
+    const byDocType = { BOLETA: 0, FACTURA: 0, CREDIT_NOTE: 0 };
     for (const d of documents) {
       if (d.status !== 'ISSUED') continue;
       const sign = d.docType === 'CREDIT_NOTE' ? -1 : 1;
       if (sign < 0) refunds += d.total; else { grossSales += d.total; transactions++; }
+      byDocType[d.docType] += sign * d.total;
       for (const p of mockState.payments.filter(p => p.salesDocumentId === d.id)) byPaymentMethod[p.method] += sign * p.amount;
     }
-    return { documents, grossSales, refunds, netSales: grossSales - refunds, transactions, byPaymentMethod };
+    const offset = filters.offset ?? 0, limit = filters.limit ?? 25;
+    return { documents: documents.slice(offset, offset + limit), totalDocuments: documents.length, byDocType,
+      grossSales, refunds, netSales: grossSales - refunds, transactions, byPaymentMethod };
   }
   
   async updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
@@ -131,6 +149,14 @@ export class MockApiClient implements ApiClient {
   async logout(): Promise<void> {
     await delay(200);
     this.currentUserId = null;
+  }
+
+  async refreshToken(): Promise<LoginResponse> {
+    await delay(100);
+    const user = mockState.users.find(u => u.id === this.currentUserId);
+    if (!user) throw new Error('Sesión no válida');
+    const { password, ...userWithoutPassword } = user;
+    return { user: userWithoutPassword, token: `mock-token-${user.id}-${Date.now()}` };
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }> {
@@ -615,6 +641,17 @@ export class MockApiClient implements ApiClient {
     return mockState.stock.filter(s => s.branchId === branchId);
   }
 
+  async setMinStock(branchId: string, variantId: string, minQuantity: number | null): Promise<Stock> {
+    await delay(200);
+    let row = mockState.stock.find(s => s.branchId === branchId && s.variantId === variantId);
+    if (!row) {
+      row = { branchId, variantId, quantity: 0, lastUpdated: new Date().toISOString() };
+      mockState.stock.push(row);
+    }
+    row.minQuantity = minQuantity;
+    return { ...row };
+  }
+
   async getStockByVariant(variantId: string): Promise<{ branchId: string; branchName: string; quantity: number }[]> {
     await delay(200);
     const stocks = mockState.stock.filter(s => s.variantId === variantId);
@@ -821,6 +858,24 @@ export class MockApiClient implements ApiClient {
       sales = sales.filter(d => d.cashSessionId === sessionId);
     }
     return sales.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getReceipt(saleId: string): Promise<import('@/types').Receipt> {
+    const { document, lines, payments } = await this.getSaleDetail(saleId);
+    const branch = BRANCHES.find(b => b.id === document.branchId);
+    const customer = mockState.customers.find(c => c.id === document.customerId);
+    return {
+      company: { name: 'Comercial Demo SpA', rut: '76.123.456-7', address: branch?.address ?? '' },
+      branch: { name: branch?.name ?? '', address: branch?.address ?? '' },
+      registerName: '', cashierName: '',
+      customer: customer ? { name: customer.name, rut: customer.rut } : null,
+      document,
+      lines: lines.map(l => {
+        const v = mockState.variants.find(v => v.id === l.variantId);
+        return { name: v?.name ?? l.variantId, sku: v?.sku ?? '', quantity: l.quantity, unitPrice: l.unitPrice, subtotal: l.subtotal, priceSource: l.priceSource };
+      }),
+      payments, cashPaid: payments.filter(p => p.method === 'CASH').reduce((n, p) => n + p.amount, 0),
+    };
   }
 
   async getSaleDetail(saleId: string): Promise<{ document: SalesDocument; lines: SalesLine[]; payments: Payment[]; dte: DTERequest | null }> {
@@ -1035,6 +1090,21 @@ export class MockApiClient implements ApiClient {
     return mockState.purchaseInvoices.filter(p => p.branchId === branchId);
   }
 
+  async searchPurchases(branchId: string, f: import('@/types').PurchaseSearchFilters): Promise<import('@/types').PurchaseSearchResult> {
+    await delay(200);
+    const q = f.query?.trim().toLowerCase() ?? '';
+    const items = mockState.purchaseInvoices.filter(p => {
+      const s = mockState.suppliers.find(s => s.id === p.supplierId);
+      const day = p.invoiceDate.slice(0, 10);
+      return p.branchId === branchId && (!f.supplierId || p.supplierId === f.supplierId) && (!f.status || p.status === f.status) &&
+        (!f.from || day >= f.from) && (!f.to || day <= f.to) &&
+        `${p.invoiceNumber} ${s?.name ?? ''} ${s?.rut ?? ''}`.toLowerCase().includes(q);
+    }).sort((a, b) => f.sort === 'amount' ? b.total - a.total : b.invoiceDate.localeCompare(a.invoiceDate));
+    const offset = f.offset ?? 0, limit = f.limit ?? 25;
+    return { items: items.slice(offset, offset + limit), total: items.length,
+      totalAmount: items.reduce((sum, i) => sum + i.total, 0), supplierCount: new Set(items.map(i => i.supplierId)).size };
+  }
+
   async createPurchase(
     branchId: string,
     supplierId: string,
@@ -1107,7 +1177,7 @@ export class MockApiClient implements ApiClient {
       const variant = mockState.variants.find(v => v.id === line.variantId);
       if (variant) {
         (variant as Variant).lastPurchaseCost = line.unitCost;
-        (variant as any).lastPurchaseDate = now;
+        (variant as Variant).lastPurchaseDate = now;
       }
     }
 

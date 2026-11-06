@@ -9,6 +9,8 @@ export interface JwtUserPayload {
   jti?: string;
   iat?: number;
   exp?: number;
+  /** Momento (segundos) del login original; se conserva al renovar el token. */
+  authTime?: number;
   email: string;
   name: string;
   rut: string;

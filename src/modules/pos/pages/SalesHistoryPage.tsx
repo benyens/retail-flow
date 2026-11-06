@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/api";
+import { Link } from "react-router-dom";
 import { useApp } from "@/state/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -210,7 +211,8 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
           <div className="flex flex-wrap gap-2 items-center text-xs">
             <span>Sucursal:</span>
             <select
-              className="border rounded px-2 py-1 text-xs"
+              className="border rounded px-2 py-1 text-sm md:text-xs h-9 md:h-auto bg-background"
+              aria-label="Sucursal"
               value={selectedBranchId ?? ""}
               onChange={(e) => handleBranchChange(e.target.value)}
             >
@@ -224,27 +226,57 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
             <Input
               value={searchFolio}
               onChange={(e) => setSearchFolio(e.target.value)}
-              placeholder="Buscar por folio..."
-              className="h-7 text-[11px] w-40"
+              placeholder="Buscar por folio…"
+              aria-label="Buscar por folio"
+              className="h-9 md:h-7 text-sm md:text-[11px] w-full sm:w-40"
             />
             <Input
               value={searchRut}
               onChange={(e) => setSearchRut(e.target.value)}
-              placeholder="Buscar por RUT cliente..."
-              className="h-7 text-[11px] w-48"
+              placeholder="Buscar por RUT cliente…"
+              aria-label="Buscar por RUT del cliente"
+              className="h-9 md:h-7 text-sm md:text-[11px] w-full sm:w-48"
             />
           </div>
         </CardHeader>
 
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando ventas...</p>
+            <p className="text-sm text-muted-foreground">Cargando ventas…</p>
           ) : filteredSales.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No hay ventas registradas para los filtros seleccionados.
             </p>
           ) : (
-            <div className="overflow-auto max-h-[70vh]">
+            <>
+            {/* Celular: tarjetas */}
+            <ul className="md:hidden space-y-2">
+              {filteredSales.map(({ doc, customer }) => (
+                <li key={doc.id} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium">{typeLabel(doc.docType)} {doc.folio ? `N° ${doc.folio}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{formatDateTime(doc.createdAt)}</p>
+                      {customer && <p className="text-xs text-muted-foreground truncate">{customer.name} · {customer.rut}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-semibold tabular-nums">{formatCurrency(doc.total)}</p>
+                      <p className="text-xs text-muted-foreground">{statusLabel(doc.status)}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <Button asChild variant="outline" size="sm" className="h-9"><Link to={`/comprobante/${doc.id}`}>Comprobante</Link></Button>
+                    {canManageSales && doc.status === "ISSUED" && doc.docType !== "CREDIT_NOTE" && <>
+                      <Button variant="outline" size="sm" className="h-9" onClick={() => setCreditNoteSaleId(doc.id)}>Nota de crédito</Button>
+                      <Button variant="outline" size="sm" className="h-9" onClick={() => handleOpenVoid(doc)}>Anular</Button>
+                    </>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {/* Escritorio: tabla */}
+            <div className="hidden md:block overflow-auto max-h-[70vh]">
               <table className="w-full text-xs">
                 <thead className="bg-muted sticky top-0">
                   <tr>
@@ -272,12 +304,15 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
                       <td className="px-2 py-1">
                         {customer ? customer.rut : "-"}
                       </td>
-                      <td className="px-2 py-1 text-right">
+                      <td className="px-2 py-1 text-right tabular-nums">
                         {formatCurrency(doc.total)}
                       </td>
                       <td className="px-2 py-1">{statusLabel(doc.status)}</td>
                       <td className="px-2 py-1 text-right">
                         <div className="inline-flex gap-1">
+                          <Button asChild variant="outline" size="sm" className="h-7 px-2 text-[10px]">
+                            <Link to={`/comprobante/${doc.id}`} aria-label={`Comprobante de ${typeLabel(doc.docType)} ${doc.folio ?? ""}`}>Comprobante</Link>
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -306,6 +341,7 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

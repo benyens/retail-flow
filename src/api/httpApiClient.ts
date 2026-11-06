@@ -11,6 +11,8 @@ const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.
 // Acepta la URL con o sin barra final y con o sin /api/v1.
 export const API_ORIGIN = (RAW_API_BASE || "http://localhost:3000").replace(/\/+$/, "").replace(/\/api\/v1$/, "");
 const API_BASE = `${API_ORIGIN}/api/v1`;
+import { needsRefresh } from "@/utils/session";
+
 const TOKEN_STORAGE_KEY = "auth_token";
 
 class HttpError extends Error {
@@ -24,6 +26,23 @@ function validationMessage(data: unknown): string | undefined {
   if (issues.formErrors?.[0]) return issues.formErrors[0];
   const [field, errors] = Object.entries(issues.fieldErrors ?? {}).find(([, v]) => v && v.length > 0) ?? [];
   return field && errors ? `Revisa el campo «${field}»: ${errors[0]}` : "Revisa los datos ingresados";
+}
+
+// Renovación silenciosa: mientras se usa la app, si el token está por vencer se pide
+// uno nuevo en segundo plano (ver utils/session.ts).
+let refreshing: Promise<void> | null = null;
+
+export function maybeRefresh(token: string) {
+  if (refreshing || !needsRefresh(token)) return;
+  refreshing = post<LoginResponse>("/auth/refresh")
+    .then((res) => {
+      // Solo si nadie cerró o cambió la sesión mientras tanto.
+      if (localStorage.getItem(TOKEN_STORAGE_KEY) !== token) return;
+      localStorage.setItem(TOKEN_STORAGE_KEY, res.token);
+      window.dispatchEvent(new CustomEvent("auth:refreshed", { detail: res }));
+    })
+    .catch(() => undefined) // si falla, el token actual sigue valiendo hasta su vencimiento
+    .finally(() => { refreshing = null; });
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -49,6 +68,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent("auth:expired"));
   }
+  if (res.ok && token && !path.startsWith("/auth/")) maybeRefresh(token);
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => undefined);
   if (!res.ok) throw new HttpError(data?.message ?? validationMessage(data) ?? `Error ${res.status}`, res.status, data);
@@ -61,6 +81,10 @@ const patch = <T>(path: string, body: unknown) => request<T>(path, { method: "PA
 const put = <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) });
 const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
 
+function stringify(params: object): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v === undefined || v === "" ? undefined : String(v)]));
+}
+
 function qs(params: Record<string, string | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][];
   if (entries.length === 0) return "";
@@ -70,10 +94,15 @@ function qs(params: Record<string, string | undefined>): string {
 export class HttpApiClient implements ApiClient {
   getPriceLists(): Promise<import('@/types').PriceList[]> { return get('/price-lists'); }
   getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport> {
-    return get(`/reports/sales${qs({ branchId, ...filters })}`);
+    return get(`/reports/sales${qs({ branchId, ...stringify(filters) })}`);
+  }
+  getDashboard(branchId: string): Promise<import('@/types').Dashboard> { return get(`/reports/dashboard${qs({ branchId })}`); }
+  searchPurchases(branchId: string, filters: import('@/types').PurchaseSearchFilters): Promise<import('@/types').PurchaseSearchResult> {
+    return get(`/purchases/search${qs({ branchId, ...stringify(filters) })}`);
   }
   async login(credentials: LoginCredentials): Promise<LoginResponse> { return post<LoginResponse>("/auth/login", credentials); }
   async logout(): Promise<void> { await post<void>("/auth/logout"); }
+  refreshToken(): Promise<LoginResponse> { return post<LoginResponse>("/auth/refresh"); }
   changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }> {
     return post<{ token: string }>("/auth/change-password", { currentPassword, newPassword });
   }
@@ -122,6 +151,7 @@ export class HttpApiClient implements ApiClient {
   deleteWholesaleTier(id: string): Promise<void> { return del<void>(`/wholesale-tiers/${id}`); }
 
   getStock(branchId: string): Promise<Stock[]> { return get<Stock[]>(`/stock${qs({ branchId })}`); }
+  setMinStock(branchId: string, variantId: string, minQuantity: number | null): Promise<Stock> { return put<Stock>("/stock/minimum", { branchId, variantId, minQuantity }); }
   getInventoryMovements(branchId: string): Promise<InventoryMovement[]> { return get<InventoryMovement[]>(`/inventory-movements${qs({ branchId })}`); }
   getInventoryLines(movementId: string): Promise<InventoryLine[]> { return get<InventoryLine[]>(`/inventory-lines/${movementId}`); }
   createAdjustment(branchId: string, variantId: string, quantity: number, notes: string): Promise<InventoryMovement> { return post<InventoryMovement>("/stock/adjustments", { branchId, variantId, quantity, notes }); }
@@ -139,6 +169,7 @@ export class HttpApiClient implements ApiClient {
     return post("/sales", { branchId, sessionId, customerId, docType, lines, payments });
   }
   getSales(branchId: string, sessionId?: string): Promise<SalesDocument[]> { return get<SalesDocument[]>(`/sales${qs({ branchId, sessionId })}`); }
+  getReceipt(saleId: string): Promise<import('@/types').Receipt> { return get(`/sales/${saleId}/receipt`); }
   getSaleDetail(saleId: string): Promise<{ document: SalesDocument; lines: SalesLine[]; payments: Payment[]; dte: DTERequest | null }> { return get(`/sales/${saleId}`); }
   voidSaleInternal(saleId: string, reason: string): Promise<SalesDocument> { return post<SalesDocument>(`/sales/${saleId}/void`, { reason }); }
 

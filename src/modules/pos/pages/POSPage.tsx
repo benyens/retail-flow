@@ -48,6 +48,7 @@ import {
   PaymentDraft,
 } from "@/modules/pos/components/PaymentDialog";
 import { CustomerDialog } from "@/modules/pos/components/CustomerDialog";
+import BarcodeScanButton from "@/components/BarcodeScanButton";
 import { PriceEditDialog } from "@/modules/pos/components/PriceEditDialog";
 import { CashCloseDialog } from "@/modules/cash/components/CashCloseDialog";
 import { CustomerEditDialog } from "@/modules/pos/components/CustomerEditDialog";
@@ -75,7 +76,7 @@ const canEditPrice = true;
 const newId = (prefix = "cart") => {
   const base =
     typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? (crypto as any).randomUUID()
+      ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random()
           .toString(36)
           .slice(2)}`;
@@ -289,6 +290,20 @@ export default function POSPage() {
   const canIssueInvoice =
     selectedCustomer != null &&
     selectedCustomer.rut !== "66666666-6";
+
+  // Código leído con la cámara: si coincide exacto con un código de barras o SKU se
+  // agrega al carrito; si no, queda en el buscador para elegir a mano.
+  const handleScanned = (code: string) => {
+    const c = code.toLowerCase();
+    const match = variants.find((v) => (v.barcode ?? "").toLowerCase() === c || v.sku.toLowerCase() === c);
+    if (match) {
+      addVariantToCart(match); // avisa si no hay stock
+      setQuery("");
+    } else {
+      setQuery(code);
+      toast.info(`No hay un producto con el código ${code}`);
+    }
+  };
 
   // Agregar al carrito con control de stock
   const addVariantToCart = (
@@ -720,11 +735,11 @@ export default function POSPage() {
         method: p.method,
         amount: p.amount,
         reference: p.note,
-      })) as any[];
+      }));
 
       const customerId = selectedCustomer ? selectedCustomer.id : null;
 
-      await apiClient.createSale(
+      const { document: sale } = await apiClient.createSale(
         selectedCashRegister.branchId,
         currentSession.id,
         customerId,
@@ -733,11 +748,15 @@ export default function POSPage() {
         payments
       );
 
-      toast.success("Venta registrada correctamente");
+      toast.success("Venta registrada correctamente", {
+        action: { label: "Comprobante", onClick: () => navigate(`/comprobante/${sale.id}`) },
+        duration: 8000,
+      });
       setCart(emptyCart);
+      setMobilePanel("products");
     } catch (e) {
       console.error(e);
-      toast.error("Error al crear venta");
+      toast.error(e instanceof Error ? `No se pudo registrar la venta: ${e.message}` : "No se pudo registrar la venta");
     }
   };
 
@@ -859,7 +878,7 @@ export default function POSPage() {
       <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Lista de productos */}
         <div className={cn("flex-1 min-w-0 p-3 md:p-4 overflow-auto overscroll-contain bg-pos-panel", mobilePanel === "cart" && "hidden md:block")}>
-          <div className="mb-2">
+          <div className="mb-2 flex gap-2">
             <Input
               ref={searchInputRef}
               value={query}
@@ -871,8 +890,9 @@ export default function POSPage() {
               enterKeyHint="search"
               autoComplete="off"
               spellCheck={false}
-              className="h-12 text-base md:text-lg"
+              className="h-12 text-base md:text-lg flex-1"
             />
+            <BarcodeScanButton className="h-12" onDetected={handleScanned} />
           </div>
           <div className="mb-2 hidden sm:block text-[10px] text-muted-foreground">
             También puedes usar: 12*desodorante, -1*shampoo, etc.
@@ -900,13 +920,13 @@ export default function POSPage() {
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate">
-                      {v.name}
+                      {v.product?.name ?? v.name}
+                      {v.name && v.name !== "Única" && v.name !== v.product?.name && (
+                        <span className="text-muted-foreground font-normal"> · {v.name}</span>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono truncate">
                       {v.sku}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {v.variantGroup?.name}
                     </div>
                   </div>
 
@@ -1148,7 +1168,8 @@ export default function POSPage() {
                     <div className="flex justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-medium truncate">
-                          {l.variant.name}
+                          {l.variant.product?.name ?? l.variant.name}
+                          {l.variant.name && l.variant.name !== "Única" && l.variant.name !== l.variant.product?.name && ` · ${l.variant.name}`}
                         </div>
                         <div className="text-xs text-muted-foreground font-mono truncate">
                           {l.variant.sku}

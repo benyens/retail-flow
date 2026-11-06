@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '@/api';
 import { useApp } from '@/state/AppContext';
 import { formatCurrency } from '@/utils/format';
@@ -10,6 +11,7 @@ import { Filter, Pager, selectClass, exportCsv, localDay } from '@/components/ui
 import type { DocumentType, DocumentStatus } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
+const PAGE = 25;
 const types = { BOLETA: 'Boleta', FACTURA: 'Factura', CREDIT_NOTE: 'Nota de crédito' };
 const statuses = { ISSUED: 'Emitido', VOID_INTERNAL: 'Anulado', PENDING_ISSUE: 'Pendiente', REJECTED: 'Rechazado' };
 const methods = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CHECK: 'Cheque', OTHER: 'Otro' };
@@ -24,7 +26,21 @@ export default function ReportsPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const valid = !!from && !!to && from <= to && +new Date(to) - +new Date(from) <= 366 * 86400000;
   const filters = { from, to, docType: (docType || undefined) as DocumentType | undefined, status: (status || undefined) as DocumentStatus | undefined, query: query.trim() || undefined };
-  const report = useQuery({ queryKey: ['sales-report', selectedBranch?.id, filters], queryFn: () => apiClient.getSalesReport(selectedBranch!.id, filters), enabled: !!selectedBranch && valid });
+  const report = useQuery({ queryKey: ['sales-report', selectedBranch?.id, filters, page], queryFn: () => apiClient.getSalesReport(selectedBranch!.id, { ...filters, offset: page * PAGE, limit: PAGE }), enabled: !!selectedBranch && valid, placeholderData: keepPreviousData });
+  const [exporting, setExporting] = useState(false);
+  // La exportación pide todos los documentos del período (hasta 5.000), no solo la página visible.
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const all = await apiClient.getSalesReport(selectedBranch!.id, { ...filters, offset: 0, limit: 5000 });
+      exportCsv('ventas.csv', [['Fecha Chile', 'Folio', 'Tipo', 'Estado', 'Neto', 'IVA', 'Total'], ...all.documents.map(d => [localDay(d.createdAt), d.folio, types[d.docType], statuses[d.status], d.subtotal, d.tax, d.total])]);
+      if (all.totalDocuments > all.documents.length) toast.warning(`Se exportaron ${all.documents.length} de ${all.totalDocuments} documentos. Acota el período para exportar el resto.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo exportar');
+    } finally {
+      setExporting(false);
+    }
+  };
   const variants = useQuery({ queryKey: ['report-variants', selectedBranch?.id], queryFn: () => apiClient.getVariants(selectedBranch!.id), enabled: !!detailId && !!selectedBranch });
   const detail = useQuery({ queryKey: ['sale-detail', detailId], queryFn: () => apiClient.getSaleDetail(detailId!), enabled: !!detailId });
   useEffect(() => { setPage(0); setDetailId(null); }, [selectedBranch?.id, from, to, docType, status, query]);
@@ -44,8 +60,8 @@ export default function ReportsPage() {
     ].map(([label, value]) => <Card key={label}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold mt-2">{value}</p></CardContent></Card>)}</div>
     <p className="text-sm text-muted-foreground">{data.transactions} ventas emitidas. Los totales incluyen IVA, descuentan notas de crédito y excluyen pendientes, rechazados y anulados. Todos los filtros se aplican también a los totales.</p>
     <Card><CardContent className="pt-5"><h2 className="font-semibold mb-4">Cobros menos devoluciones por medio de pago</h2><div className="grid grid-cols-2 lg:grid-cols-5 gap-4">{Object.entries(methods).map(([key, label]) => <div key={key}><p className="text-sm text-muted-foreground">{label}</p><p className="font-semibold">{formatCurrency(data.byPaymentMethod[key as keyof typeof methods])}</p></div>)}</div></CardContent></Card>
-    <div className="flex justify-between items-center"><h2 className="font-semibold">Documentos del período</h2><Button variant="outline" disabled={!data.documents.length} onClick={() => exportCsv('ventas.csv', [['Fecha Chile', 'Folio', 'Tipo', 'Estado', 'Neto', 'IVA', 'Total'], ...data.documents.map(d => [localDay(d.createdAt), d.folio, types[d.docType], statuses[d.status], d.subtotal, d.tax, d.total])])}>Exportar resultados</Button></div>
-    <div className="border rounded-lg overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted"><tr>{['Fecha', 'Folio', 'Documento', 'Estado', 'Total', 'Detalle'].map(h => <th className="p-3 text-left" key={h}>{h}</th>)}</tr></thead><tbody>{data.documents.slice(page * 25, (page + 1) * 25).map(d => <tr key={d.id} className="border-t"><td className="p-3">{localDay(d.createdAt)}</td><td className="p-3">{d.folio ?? 'Sin folio'}</td><td className="p-3">{types[d.docType]}</td><td className="p-3">{statuses[d.status]}</td><td className="p-3">{formatCurrency(d.total)}</td><td className="p-3"><Button size="sm" variant="outline" onClick={() => setDetailId(d.id)} aria-label={`Ver ${types[d.docType]} ${d.folio}`}>Ver detalle</Button></td></tr>)}{!data.documents.length && <tr><td className="p-8 text-center" colSpan={6}>No hay documentos para estos filtros.</td></tr>}</tbody></table></div><Pager page={page} count={data.documents.length} onChange={setPage} /></>}
+    <div className="flex justify-between items-center"><h2 className="font-semibold">Documentos del período</h2><Button variant="outline" disabled={!data.totalDocuments || exporting} onClick={exportAll}>{exporting ? 'Exportando…' : 'Exportar resultados'}</Button></div>
+    <div className="md:border md:rounded-lg md:overflow-x-auto"><table className="table-cards w-full text-sm"><thead className="bg-muted"><tr>{['Fecha', 'Folio', 'Documento', 'Estado', 'Total', 'Detalle'].map(h => <th className="p-3 text-left" key={h}>{h}</th>)}</tr></thead><tbody>{data.documents.map(d => <tr key={d.id} className="border-t"><td data-label="Fecha" className="p-3">{localDay(d.createdAt)}</td><td data-label="Folio" className="p-3">{d.folio ?? 'Sin folio'}</td><td data-label="Documento" className="p-3">{types[d.docType]}</td><td data-label="Estado" className="p-3">{statuses[d.status]}</td><td data-label="Total" className="p-3 tabular-nums font-medium">{formatCurrency(d.total)}</td><td data-label="" className="p-3"><Button size="sm" variant="outline" onClick={() => setDetailId(d.id)} aria-label={`Ver ${types[d.docType]} ${d.folio}`}>Ver detalle</Button></td></tr>)}{!data.documents.length && <tr><td className="p-8 text-center" colSpan={6}>No hay documentos para estos filtros.</td></tr>}</tbody></table></div><Pager page={page} count={data.totalDocuments} size={PAGE} onChange={setPage} /></>}
     <Dialog open={!!detailId} onOpenChange={open => !open && setDetailId(null)}><DialogContent className="max-h-[85vh] overflow-auto"><DialogHeader><DialogTitle>Detalle de venta {detail.data?.document.folio}</DialogTitle><DialogDescription>Productos y pagos del documento seleccionado</DialogDescription></DialogHeader>{detail.isPending ? <p>Cargando…</p> : detail.isError ? <p role="alert">No se pudo cargar el documento.</p> : <><ul className="space-y-3">{detail.data?.lines.map(l => <li key={l.id} className="border-b pb-2">{(() => { const v = variants.data?.find(v => v.id === l.variantId); return v ? `${v.product.name} · ${v.name}` : `Variante ${l.variantId}`; })()}<p>{l.quantity} × {formatCurrency(l.unitPrice)} = {formatCurrency(l.subtotal)}</p></li>)}</ul>{detail.data?.payments.map(p => <p key={p.id}>{methods[p.method]}: {formatCurrency(p.amount)}</p>)}</>}</DialogContent></Dialog>
   </div>;
 }
