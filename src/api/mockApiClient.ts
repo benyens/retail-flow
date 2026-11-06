@@ -221,6 +221,14 @@ export class MockApiClient implements ApiClient {
     return session;
   }
 
+  async getOpenSessions(branchId: string): Promise<import('@/types').OpenCashSession[]> {
+    await delay(150);
+    return mockState.cashSessions
+      .filter(s => s.status === 'OPEN' && CASH_REGISTERS.find(r => r.id === s.cashRegisterId)?.branchId === branchId)
+      .map(s => ({ ...s, registerName: CASH_REGISTERS.find(r => r.id === s.cashRegisterId)?.name ?? '',
+        userName: mockState.users.find(u => u.id === s.userId)?.name ?? '', salesCount: 0, salesNet: 0 }));
+  }
+
   async getCurrentSession(cashRegisterId: string): Promise<CashSession | null> {
     await delay(200);
     return mockState.cashSessions.find(

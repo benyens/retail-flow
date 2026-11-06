@@ -111,6 +111,7 @@ export class HttpApiClient implements ApiClient {
   getCashRegisters(branchId: string): Promise<CashRegister[]> { return get<CashRegister[]>(`/cash-registers${qs({ branchId })}`); }
 
   openCashSession(cashRegisterId: string, initialFund: number): Promise<CashSession> { return post<CashSession>("/cash-sessions", { cashRegisterId, initialFund }); }
+  getOpenSessions(branchId: string): Promise<import('@/types').OpenCashSession[]> { return get(`/cash-sessions/open${qs({ branchId })}`); }
   getCurrentSession(cashRegisterId: string): Promise<CashSession | null> { return get<CashSession | null>(`/cash-sessions/current${qs({ cashRegisterId })}`); }
   closeCashSession(sessionId: string, declaredCash: number, notes?: string): Promise<CashSession> { return post<CashSession>(`/cash-sessions/${sessionId}/close`, { declaredCash, notes }); }
   getSessionSummary(sessionId: string): Promise<CashSessionSummary> { return get<CashSessionSummary>(`/cash-sessions/${sessionId}/summary`); }

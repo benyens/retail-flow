@@ -39,6 +39,14 @@ export interface CashSession {
   closingNotes?: string;
 }
 
+/** Sesión abierta con quién la abrió y lo vendido (ventas − notas de crédito). */
+export interface OpenCashSession extends CashSession {
+  registerName: string;
+  userName: string;
+  salesCount: number;
+  salesNet: number;
+}
+
 export type CashMovementType = 'IN' | 'OUT';
 export type CashMovementConcept = 
   | 'WITHDRAW_TO_SAFE' 
@@ -209,7 +217,7 @@ export interface Dashboard {
   last7Days: DashboardDay[];
   weekNet: number;
   topProducts: { variantId: string; name: string; quantity: number; total: number }[];
-  openSessions: { id: string; registerName: string; openedAt: string; initialFund: number; expectedCash: number }[];
+  openSessions: OpenCashSession[];
   lowStock: { variantId: string; name: string; sku: string; quantity: number; minQuantity: number }[];
   lowStockCount: number;
 }

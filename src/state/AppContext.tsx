@@ -112,7 +112,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [auth.isAuthenticated]);
 
-  // Load cash registers when branch changes; restaura la última caja de esa sucursal.
+  // Load cash registers when branch changes. Al cajero se le restaura la última caja;
+  // admin y encargado entran sin caja y la eligen solo si van a vender.
+  const restoreRegister = auth.user?.role === 'CASHIER';
   useEffect(() => {
     if (selectedBranch) {
       writePref(BRANCH_PREF, selectedBranch.id);
@@ -120,11 +122,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentSession(null);
       apiClient.getCashRegisters(selectedBranch.id).then((list) => {
         setCashRegisters(list);
+        if (!restoreRegister) return;
         const restored = list.find((r) => r.id === readPref(REGISTER_PREF));
         if (restored) setSelectedCashRegister(restored);
       });
     }
-  }, [selectedBranch]);
+  }, [selectedBranch, restoreRegister]);
 
   useEffect(() => {
     if (selectedCashRegister) writePref(REGISTER_PREF, selectedCashRegister.id);
@@ -134,6 +137,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (selectedCashRegister) {
       apiClient.getCurrentSession(selectedCashRegister.id).then(setCurrentSession);
+    } else {
+      setCurrentSession(null);
     }
   }, [selectedCashRegister]);
 

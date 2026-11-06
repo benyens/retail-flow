@@ -116,8 +116,12 @@ export default function DashboardPage() {
                 <ul className="space-y-3">
                   {d.openSessions.map((s) => (
                     <li key={s.id} className="flex justify-between gap-3 text-sm">
-                      <div><p className="font-medium">{s.registerName}</p><p className="text-xs text-muted-foreground">Desde {formatDateTime(s.openedAt)}</p></div>
-                      <div className="text-right"><p className="font-semibold tabular-nums">{formatCurrency(s.expectedCash)}</p><p className="text-xs text-muted-foreground">efectivo esperado</p></div>
+                      <div className="min-w-0">
+                        <p className="font-medium">{s.registerName} · {s.userName}</p>
+                        <p className="text-xs text-muted-foreground">Desde {formatDateTime(s.openedAt)}</p>
+                        <p className="text-xs text-muted-foreground tabular-nums">{s.salesCount} ventas · {formatCurrency(s.salesNet)}</p>
+                      </div>
+                      <div className="text-right shrink-0"><p className="font-semibold tabular-nums">{formatCurrency(s.expectedCash)}</p><p className="text-xs text-muted-foreground">efectivo en caja</p></div>
                     </li>
                   ))}
                 </ul>

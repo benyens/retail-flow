@@ -1,3 +1,4 @@
+import RegisterGate from "@/modules/pos/components/RegisterGate";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -75,14 +76,14 @@ function AppRoutes() {
       }>
         {/* Administración entra al resumen; cajeros, directo a vender. */}
         <Route index element={<Navigate to={auth.user?.role === 'CASHIER' ? '/pos' : '/inicio'} replace />} />
-        <Route path="pos" element={<POSPage />} />
+        <Route path="pos" element={<RegisterGate><POSPage /></RegisterGate>} />
 
         {/* aquí usamos la página de historial de ventas */}
         <Route path="pos/ventas" element={<SalesHistoryPage mode="sales" />} />
 
         <Route path="pos/devoluciones" element={<SalesHistoryPage mode="returns" />} />
-        <Route path="pos/movimientos" element={<CashMovementsPage />} />
-        <Route path="pos/cerrar" element={<CashClosePage />} />
+        <Route path="pos/movimientos" element={<RegisterGate><CashMovementsPage /></RegisterGate>} />
+        <Route path="pos/cerrar" element={<RegisterGate><CashClosePage /></RegisterGate>} />
     
         <Route element={<AdminRoute />}>
         <Route path="inicio" element={<DashboardPage />} />

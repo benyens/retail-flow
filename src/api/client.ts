@@ -56,6 +56,8 @@ export interface ApiClient {
   openCashSession(cashRegisterId: string, initialFund: number): Promise<CashSession>;
   closeCashSession(sessionId: string, declaredCash: number, notes?: string): Promise<CashSession>;
   getCurrentSession(cashRegisterId: string): Promise<CashSession | null>;
+  /** Cajas abiertas de la sucursal, con quién las abrió. */
+  getOpenSessions(branchId: string): Promise<import('@/types').OpenCashSession[]>;
   getSessionSummary(sessionId: string): Promise<CashSessionSummary>;
   
   // Cash Movements

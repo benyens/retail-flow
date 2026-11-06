@@ -9,15 +9,17 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 
 export default function MainLayout() {
-  const { selectedBranch, selectedCashRegister } = useApp();
+  const { selectedBranch, selectedCashRegister, auth } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const { pathname } = useLocation();
 
   // Cierra el menú del celular si la ruta cambia por otro medio (atajo, redirección).
   useEffect(() => { setMenuOpen(false); }, [pathname]);
 
-  // Show branch/register selector if not selected
-  if (!selectedBranch || !selectedCashRegister) {
+  // El cajero elige sucursal y caja al entrar; admin y encargado solo la sucursal
+  // (la caja se pide al ir a vender, ver RegisterGate).
+  const needsRegister = auth.user?.role === 'CASHIER';
+  if (!selectedBranch || (needsRegister && !selectedCashRegister)) {
     return <BranchSelector />;
   }
 
@@ -43,7 +45,7 @@ export default function MainLayout() {
           <Store className="h-5 w-5 shrink-0 text-sidebar-primary" aria-hidden="true" />
           <div className="min-w-0 leading-tight">
             <p className="text-sm font-semibold truncate">{selectedBranch.name}</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">{selectedCashRegister.name}</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate">{selectedCashRegister?.name ?? 'Sin caja'}</p>
           </div>
         </header>
         <div className="hidden md:flex justify-end px-6 border-b"><KeyboardShortcuts /></div>

@@ -104,6 +104,7 @@ Corre ambos después de cualquier cambio. La generación Prisma, migración inic
 ## Funciones recientes (frontend)
 
 - `/inicio` (`DashboardPage`): ADMIN/MANAGER entran ahí; CASHIER va a `/pos`.
+- Cajas: el CASHIER elige sucursal y caja al entrar. ADMIN/MANAGER solo sucursal; `RegisterGate` pide caja en `/pos`, `/pos/movimientos` y `/pos/cerrar` y muestra quién tiene cada una abierta (`GET /cash-sessions/open`). Nadie vende en una sesión que abrió otra persona (409 en `createSale`); un supervisor sí puede revisarla y cerrarla.
 - Stock mínimo por sucursal (`Stock.minQuantity`, `PUT /stock/minimum`); "por reponer" = `isLowStock` en `utils/stock.ts`. `StockPage` acepta `?filtro=reponer|sin-stock`.
 - `BarcodeScanButton`: `BarcodeDetector` nativo o `@zxing/browser` cargado bajo demanda. `vercel.json` permite `camera=(self)`.
 - `/comprobante/:id` (`ReceiptPage`, fuera de `MainLayout`): imprime 58/80 mm y comparte texto. Dice explícitamente que no es documento tributario.

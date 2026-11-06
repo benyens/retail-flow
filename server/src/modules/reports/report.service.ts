@@ -1,3 +1,4 @@
+import { CashService } from '../cash/cash.service.js';
 import type { PrismaClient, DocumentType, DocumentStatus, Prisma } from '@prisma/client';
 
 export const chileDay = (date: Date) => new Intl.DateTimeFormat('en-CA', {
@@ -99,11 +100,7 @@ export class ReportService {
         by: ['variantId'], where: { salesDocument: { ...issued, docType: { not: 'CREDIT_NOTE' } } },
         _sum: { quantity: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 5,
       }),
-      this.prisma.cashSession.findMany({
-        where: { status: 'OPEN', cashRegister: { branchId } },
-        select: { id: true, openedAt: true, initialFund: true, expectedCash: true, cashRegister: { select: { name: true } } },
-        orderBy: { openedAt: 'asc' },
-      }),
+      new CashService(this.prisma).listOpenSessions(branchId),
       this.prisma.stock.findMany({
         where: { branchId, minQuantity: { not: null }, variant: { isActive: true } },
         select: { variantId: true, quantity: true, minQuantity: true, variant: { select: { name: true, sku: true, product: { select: { name: true } } } } },
@@ -136,8 +133,7 @@ export class ReportService {
         return { variantId: t.variantId, name: v ? label(v.product.name, v.name) : t.variantId,
           quantity: Number(t._sum.quantity ?? 0), total: Number(t._sum.subtotal ?? 0) };
       }),
-      openSessions: openSessions.map(s => ({ id: s.id, registerName: s.cashRegister.name, openedAt: s.openedAt.toISOString(),
-        initialFund: Number(s.initialFund), expectedCash: Number(s.expectedCash) })),
+      openSessions,
       lowStock: lowStock.slice(0, 10), lowStockCount: lowStock.length,
     };
   }

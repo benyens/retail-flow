@@ -6,6 +6,7 @@ import {
   useRef,
   KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/state/AppContext";
 import { apiClient } from "@/api";
@@ -27,7 +28,7 @@ import {
   Pencil,
   Boxes,
 } from "lucide-react";
-import { formatCurrency } from "@/utils/format";
+import { formatCurrency, formatDateTime } from "@/utils/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +93,14 @@ type BranchStockRow = {
 type QuickCommand = { qty: number; text: string } | null;
 
 export default function POSPage() {
-  const { currentSession, selectedCashRegister, setCurrentSession } = useApp();
+  const { currentSession, selectedCashRegister, setCurrentSession, setSelectedCashRegister, auth } = useApp();
+  const foreignSession = !!currentSession && currentSession.userId !== auth.user?.id;
+  const openSessions = useQuery({
+    queryKey: ["open-sessions", selectedCashRegister?.branchId],
+    queryFn: () => apiClient.getOpenSessions(selectedCashRegister!.branchId),
+    enabled: foreignSession,
+  });
+  const ownerName = openSessions.data?.find((s) => s.id === currentSession?.id)?.userName;
   const navigate = useNavigate();
 
   const [initialFund, setInitialFund] = useState("50000");
@@ -830,6 +838,29 @@ export default function POSPage() {
             >
               {isOpening ? "Abriendo…" : "Abrir Caja"}
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Caja abierta por otra persona (solo admin/encargado llegan aquí): se puede revisar
+  // y cerrar, pero no vender; el servidor también lo rechaza.
+  if (currentSession.userId !== auth.user?.id) {
+    return (
+      <div className="min-h-full flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>{selectedCashRegister?.name} está en uso</CardTitle>
+            <CardDescription>
+              Abierta por {ownerName ?? "otra persona"} desde el {formatDateTime(currentSession.openedAt)}.
+              Para vender, usa otra caja. Como supervisor puedes revisar sus movimientos o cerrarla.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <Button onClick={() => setSelectedCashRegister(null)}>Elegir otra caja</Button>
+            <Button variant="outline" onClick={() => navigate("/pos/movimientos")}>Ver movimientos</Button>
+            <Button variant="outline" onClick={() => navigate("/pos/cerrar")}>Cerrar esta caja</Button>
           </CardContent>
         </Card>
       </div>

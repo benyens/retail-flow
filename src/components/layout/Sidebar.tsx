@@ -59,7 +59,7 @@ const adminLinks = [
  * al elegir una opción.
  */
 export default function Sidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
-  const { auth, logout, selectedBranch, branches, setSelectedBranch, currentSession } = useApp();
+  const { auth, logout, selectedBranch, branches, setSelectedBranch, currentSession, selectedCashRegister, setSelectedCashRegister } = useApp();
   const [passwordOpen, setPasswordOpen] = useState(false);
 
   const isAdmin = auth.user?.role === 'ADMIN' || auth.user?.role === 'MANAGER';
@@ -95,9 +95,21 @@ export default function Sidebar({ className, onNavigate }: { className?: string;
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {currentSession && (
-          <div className="mt-2 px-3 py-2 bg-success/10 rounded-lg">
-            <p className="text-xs text-success font-medium">Caja Abierta</p>
+        {selectedCashRegister && (
+          <div className="mt-2 px-3 py-2 rounded-lg bg-sidebar-accent/60 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs truncate">{selectedCashRegister.name}</p>
+              <p className={cn('text-xs font-medium', currentSession ? 'text-success' : 'text-sidebar-foreground/60')}>
+                {!currentSession ? 'Cerrada' : currentSession.userId === auth.user?.id ? 'Abierta' : 'Abierta por otra persona'}
+              </p>
+            </div>
+            {/* Admin y encargado pueden soltar la caja y volver a la vista general. */}
+            {auth.user?.role !== 'CASHIER' && (
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                onClick={() => { setSelectedCashRegister(null); onNavigate?.(); }}>
+                Soltar
+              </Button>
+            )}
           </div>
         )}
       </div>

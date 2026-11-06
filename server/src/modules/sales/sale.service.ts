@@ -84,6 +84,9 @@ export class SaleService {
       const session = await tx.cashSession.findUnique({ where: { id: sessionId }, include: { cashRegister: true } });
       if (!session || session.status !== "OPEN") throw new SaleConflictError("La sesión de caja no existe o no está abierta");
       if (session.cashRegister.branchId !== branchId) throw new SaleConflictError("La sesión de caja no pertenece a la sucursal indicada");
+      // Cada sesión es responsabilidad de quien la abrió: nadie vende en la caja de otro
+      // (tampoco un admin), así el arqueo de cada persona cuadra con sus ventas.
+      if (session.userId !== createdBy) throw new SaleConflictError("Esta caja la abrió otra persona. Para vender, abre tu propia caja.");
 
       const actor = await tx.user.findUniqueOrThrow({ where: { id: createdBy } });
       if (new Set(lines.map(l => l.variantId)).size !== lines.length) throw new SaleConflictError('Combina las cantidades de cada variante en una sola línea');

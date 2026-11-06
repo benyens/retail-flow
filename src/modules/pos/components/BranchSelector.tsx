@@ -13,14 +13,16 @@ export default function BranchSelector() {
     selectedCashRegister,
     setSelectedCashRegister,
     logout,
+    auth,
   } = useApp();
+  const isCashier = auth.user?.role === 'CASHIER';
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-lg animate-scale-in">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Configuración de Punto de Venta</CardTitle>
-          <CardDescription>Seleccione la sucursal y caja para operar</CardDescription>
+          <CardTitle className="text-2xl">{isCashier ? 'Configuración de Punto de Venta' : 'Elige la sucursal'}</CardTitle>
+          <CardDescription>{isCashier ? 'Seleccione la sucursal y caja para operar' : 'La caja se elige solo si vas a vender.'}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Branch Selection */}

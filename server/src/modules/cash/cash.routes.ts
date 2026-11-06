@@ -31,6 +31,12 @@ export async function cashRoutes(fastify: FastifyInstance) {
     } catch (err) { return handleError(err, reply, request); }
   });
 
+  fastify.get("/api/v1/cash-sessions/open", { preHandler: ro }, async (request, reply) => {
+    const { branchId } = request.query as { branchId?: string };
+    if (!branchId) return reply.status(422).send({ error: "VALIDATION_ERROR", message: "branchId es requerido" });
+    return service.listOpenSessions(branchId);
+  });
+
   fastify.get("/api/v1/cash-sessions/current", { preHandler: ro }, async (request, reply) => {
     const { cashRegisterId } = request.query as { cashRegisterId?: string };
     if (!cashRegisterId) return reply.status(422).send({ error: "VALIDATION_ERROR", message: "cashRegisterId es requerido" });

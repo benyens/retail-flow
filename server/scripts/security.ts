@@ -67,6 +67,14 @@ try {
     lines: [{ variantId: variant.id, variantGroupId: variant.variantGroupId, quantity: 2, unitPrice: 1190, subtotal: 2380, priceSource: 'NORMAL' }], payments: [{ method: 'CASH', amount: 2380 }] };
   await req(admin.token, 'POST', '/sales', { ...payload, lines: [{ ...payload.lines[0], subtotal: 1 }], payments: [{ method: 'CASH', amount: 1 }] }, 409);
   const sale = await req(admin.token, 'POST', '/sales', payload, 201);
+  // Nadie vende en la caja que abrió otra persona (tampoco un encargado).
+  const foreignSale = await app.inject({ method: 'POST', url: '/api/v1/sales', headers: { authorization: `Bearer ${manager.token}` }, payload });
+  assert.equal(foreignSale.statusCode, 409); assert.match(foreignSale.json().message, /abrió otra persona/);
+  const openList = await req(manager.token, 'GET', `/cash-sessions/open?branchId=${a.id}`);
+  const listed = openList.find((s: { id: string }) => s.id === session.id);
+  assert.equal(listed.userName, run); assert.equal(listed.salesCount, 1); assert.equal(listed.salesNet, 2380);
+  await req(foreign.token, 'GET', `/cash-sessions/open?branchId=${a.id}`, undefined, 403);
+  assertions += 6;
   await req(cashier.token, 'POST', `/sales/${sale.document.id}/void`, { reason: run }, 403);
   await req(foreign.token, 'GET', `/sales/${sale.document.id}`, undefined, 403);
   const credit = { originalSaleId: sale.document.id, refType: 'DEVOLUCION_PARCIAL', lines: [{ variantId: variant.id, quantity: 2 }], refundMethod: 'CASH' };
