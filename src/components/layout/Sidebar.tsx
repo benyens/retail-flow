@@ -22,6 +22,7 @@ import {
   DollarSign,
   KeyRound,
   LayoutDashboard,
+  Building,
 } from 'lucide-react';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ const adminLinks = [
   { to: '/admin/reports', icon: BarChart3, label: 'Reportes' },
   { to: '/admin/audit', icon: Shield, label: 'Auditoría' },
   { to: '/admin/users', icon: Settings, label: 'Usuarios' },
+  { to: '/admin/sucursales', icon: Building, label: 'Empresa y locales' },
 ];
 
 /**
@@ -147,7 +149,7 @@ export default function Sidebar({ className, onNavigate }: { className?: string;
               Administración
             </p>
             <div className="space-y-1">
-              {adminLinks.filter(link => auth.user?.role === "ADMIN" || !["/admin/users", "/admin/audit"].includes(link.to)).map(link => (
+              {adminLinks.filter(link => auth.user?.role === "ADMIN" || !["/admin/users", "/admin/audit", "/admin/sucursales"].includes(link.to)).map(link => (
                 <NavLink
                   key={link.to}
                   to={link.to}

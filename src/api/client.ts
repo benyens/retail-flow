@@ -51,6 +51,15 @@ export interface ApiClient {
   // Branches & Cash Registers
   getBranches(): Promise<Branch[]>;
   getCashRegisters(branchId: string): Promise<CashRegister[]>;
+
+  // Empresa, sucursales y cajas (solo ADMIN)
+  getCompany(): Promise<import('@/types').Company>;
+  updateCompany(patch: Partial<Omit<import('@/types').Company, 'id'>>): Promise<import('@/types').Company>;
+  listAllBranches(): Promise<import('@/types').BranchWithRegisters[]>;
+  createBranch(input: { name: string; address: string }): Promise<import('@/types').BranchWithRegisters>;
+  updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters>;
+  createCashRegister(branchId: string, input: { name: string; code: string }): Promise<CashRegister>;
+  updateCashRegister(id: string, patch: Partial<{ name: string; code: string; isActive: boolean }>): Promise<CashRegister>;
   
   // Cash Sessions
   openCashSession(cashRegisterId: string, initialFund: number): Promise<CashSession>;
@@ -192,6 +201,8 @@ export interface ApiClient {
   getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport>;
   /** Resumen de la pantalla de inicio (ADMIN/MANAGER). */
   getDashboard(branchId: string): Promise<import('@/types').Dashboard>;
+  /** Todas las sucursales a las que el usuario tiene acceso (ADMIN/MANAGER). */
+  getOverview(): Promise<import('@/types').Overview>;
   getDailySalesReport(branchId: string, date: string): Promise<DailySalesReport>;
   
   // Audit

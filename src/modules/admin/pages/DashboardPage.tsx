@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api";
 import { useApp } from "@/state/AppContext";
 import { formatCurrency, formatDateTime } from "@/utils/format";
-import type { DashboardDay } from "@/types";
+import type { Dashboard, DashboardDay, Overview } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowRight, LayoutDashboard, TrendingDown, TrendingUp, Wallet } from "lucide-react";
@@ -47,16 +48,32 @@ function WeekBars({ days }: { days: DashboardDay[] }) {
   );
 }
 
+const SCOPE_PREF = "dashboard_scope";
+
 export default function DashboardPage() {
-  const { selectedBranch, auth } = useApp();
-  const dash = useQuery({
-    queryKey: ["dashboard", selectedBranch?.id],
-    queryFn: () => apiClient.getDashboard(selectedBranch!.id),
-    enabled: !!selectedBranch,
+  const { selectedBranch, setSelectedBranch, branches, auth } = useApp();
+  const multi = branches.length > 1;
+  const [scopePref, setScopePref] = useState<"branch" | "all">(() => {
+    try { return localStorage.getItem(SCOPE_PREF) === "all" ? "all" : "branch"; } catch { return "branch"; }
+  });
+  const scope = multi ? scopePref : "branch";
+  const changeScope = (v: "branch" | "all") => {
+    setScopePref(v);
+    try { localStorage.setItem(SCOPE_PREF, v); } catch { /* sin almacenamiento */ }
+  };
+  const dash = useQuery<Dashboard | Overview>({
+    queryKey: ["dashboard", scope, scope === "all" ? "all" : selectedBranch?.id],
+    queryFn: () => (scope === "all" ? apiClient.getOverview() : apiClient.getDashboard(selectedBranch!.id)),
+    enabled: scope === "all" || !!selectedBranch,
     refetchInterval: 60_000,
   });
   if (!selectedBranch) return <p className="p-8">Selecciona una sucursal.</p>;
   const d = dash.data;
+  const perBranch = d && "branches" in d ? d.branches : null;
+  const openBranch = (id: string) => {
+    const b = branches.find((x) => x.id === id);
+    if (b) { setSelectedBranch(b); changeScope("branch"); }
+  };
   const diff = d ? d.today.net - d.yesterday.net : 0;
   const firstName = auth.user?.name?.split(" ")[0];
 
@@ -64,7 +81,17 @@ export default function DashboardPage() {
     <div className="p-4 md:p-6 lg:p-8 space-y-5 max-w-6xl">
       <header>
         <h1 className="text-2xl font-bold flex items-center gap-2"><LayoutDashboard className="h-6 w-6" aria-hidden="true" />Inicio</h1>
-        <p className="text-muted-foreground">{firstName ? `Hola, ${firstName}. ` : ""}{selectedBranch.name} · {longDay.format(dayDate(d?.today.day ?? new Date().toISOString().slice(0, 10)))}</p>
+        <p className="text-muted-foreground">{firstName ? `Hola, ${firstName}. ` : ""}{scope === "all" ? "Todas las sucursales" : selectedBranch.name} · {longDay.format(dayDate(d?.today.day ?? new Date().toISOString().slice(0, 10)))}</p>
+        {multi && (
+          <div role="tablist" aria-label="Alcance del resumen" className="mt-3 inline-flex rounded-lg border p-0.5 bg-muted/40">
+            {([["branch", selectedBranch.name], ["all", "Todas las sucursales"]] as const).map(([v, label]) => (
+              <button key={v} type="button" role="tab" aria-selected={scope === v} onClick={() => changeScope(v)}
+                className={`px-3 h-9 rounded-md text-sm font-medium max-w-[50vw] truncate ${scope === v ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       {dash.isPending && <p role="status" className="text-muted-foreground">Cargando…</p>}
@@ -98,6 +125,30 @@ export default function DashboardPage() {
           </CardContent></Card>
         </div>
 
+        {perBranch && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Por sucursal</CardTitle></CardHeader>
+            <CardContent>
+              <ul className="divide-y">
+                {perBranch.map((b) => (
+                  <li key={b.branchId}>
+                    <button type="button" onClick={() => openBranch(b.branchId)}
+                      className="w-full text-left py-3 flex flex-wrap items-center gap-x-4 gap-y-1 hover:bg-muted/50 rounded-md px-2 -mx-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Ver resumen de ${b.name}`}>
+                      <span className="font-medium flex-1 min-w-[8rem]">{b.name}</span>
+                      <span className="tabular-nums text-sm"><span className="text-muted-foreground">Hoy </span><span className="font-semibold">{formatCurrency(b.todayNet)}</span> <span className="text-muted-foreground">({b.todayTransactions})</span></span>
+                      <span className="tabular-nums text-sm"><span className="text-muted-foreground">7 días </span>{formatCurrency(b.weekNet)}</span>
+                      <span className="text-sm text-muted-foreground">{b.openRegisters} {b.openRegisters === 1 ? "caja abierta" : "cajas abiertas"}</span>
+                      {b.lowStockCount > 0 && <span className="text-sm text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{b.lowStockCount} por reponer</span>}
+                      <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-4 [&>*]:min-w-0">
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2"><CardTitle className="text-base">Ventas netas por día</CardTitle></CardHeader>
@@ -117,7 +168,7 @@ export default function DashboardPage() {
                   {d.openSessions.map((s) => (
                     <li key={s.id} className="flex justify-between gap-3 text-sm">
                       <div className="min-w-0">
-                        <p className="font-medium">{s.registerName} · {s.userName}</p>
+                        <p className="font-medium">{scope === "all" ? `${s.branchName} · ` : ""}{s.registerName} · {s.userName}</p>
                         <p className="text-xs text-muted-foreground">Desde {formatDateTime(s.openedAt)}</p>
                         <p className="text-xs text-muted-foreground tabular-nums">{s.salesCount} ventas · {formatCurrency(s.salesNet)}</p>
                       </div>
@@ -155,7 +206,7 @@ export default function DashboardPage() {
                 <AlertTriangle className={`h-4 w-4 ${d.lowStockCount ? "text-amber-500" : ""}`} aria-hidden="true" />
                 Por reponer{d.lowStockCount > 0 && <span className="tabular-nums">({d.lowStockCount})</span>}
               </CardTitle>
-              <Button asChild variant="ghost" size="sm"><Link to="/admin/stock?filtro=reponer">Ver todo<ArrowRight className="h-4 w-4 ml-1" aria-hidden="true" /></Link></Button>
+              {scope === "branch" && <Button asChild variant="ghost" size="sm"><Link to="/admin/stock?filtro=reponer">Ver todo<ArrowRight className="h-4 w-4 ml-1" aria-hidden="true" /></Link></Button>}
             </CardHeader>
             <CardContent>
               {d.lowStockCount === 0 ? (
@@ -164,7 +215,7 @@ export default function DashboardPage() {
                 <ul className="space-y-2.5">
                   {d.lowStock.map((s) => (
                     <li key={s.variantId} className="flex items-center gap-3 text-sm">
-                      <span className="flex-1 min-w-0 truncate">{s.name}</span>
+                      <span className="flex-1 min-w-0 truncate">{s.name}{scope === "all" && <span className="text-muted-foreground"> · {s.branchName}</span>}</span>
                       <span className={`tabular-nums whitespace-nowrap font-medium ${s.quantity <= 0 ? "text-destructive" : ""}`}>{qty.format(s.quantity)}</span>
                       <span className="text-muted-foreground tabular-nums whitespace-nowrap">mín. {qty.format(s.minQuantity)}</span>
                     </li>

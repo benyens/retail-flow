@@ -87,12 +87,13 @@ export class ReportService {
    * Resumen para la pantalla de inicio: hoy vs. ayer, últimos 7 días (horario de Chile),
    * más vendidos de la semana, cajas abiertas y productos por reponer.
    */
-  async getDashboard(branchId: string, now = new Date()) {
+  async getDashboard(branch: string | string[], now = new Date()) {
+    const branchIds = Array.isArray(branch) ? branch : [branch];
     const today = chileDay(now);
     const days: string[] = [];
     for (let d = new Date(`${today}T12:00:00Z`), i = 0; i < 7; i++, d.setUTCDate(d.getUTCDate() - 1)) days.unshift(d.toISOString().slice(0, 10));
     const start = chileDayStart(days[0]!), end = chileDayStart(nextDay(today));
-    const issued = { branchId, status: 'ISSUED' as const, createdAt: { gte: start, lt: end } };
+    const issued = { branchId: { in: branchIds }, status: 'ISSUED' as const, createdAt: { gte: start, lt: end } };
 
     const [docs, top, openSessions, stocks] = await Promise.all([
       this.prisma.salesDocument.findMany({ where: issued, select: { createdAt: true, total: true, docType: true } }),
@@ -100,10 +101,10 @@ export class ReportService {
         by: ['variantId'], where: { salesDocument: { ...issued, docType: { not: 'CREDIT_NOTE' } } },
         _sum: { quantity: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 5,
       }),
-      new CashService(this.prisma).listOpenSessions(branchId),
+      new CashService(this.prisma).listOpenSessions(branchIds),
       this.prisma.stock.findMany({
-        where: { branchId, minQuantity: { not: null }, variant: { isActive: true } },
-        select: { variantId: true, quantity: true, minQuantity: true, variant: { select: { name: true, sku: true, product: { select: { name: true } } } } },
+        where: { branchId: { in: branchIds }, minQuantity: { not: null }, variant: { isActive: true } },
+        select: { branchId: true, branch: { select: { name: true } }, variantId: true, quantity: true, minQuantity: true, variant: { select: { name: true, sku: true, product: { select: { name: true } } } } },
       }),
     ]);
 
@@ -121,7 +122,7 @@ export class ReportService {
     const label = (product: string, variant: string) => (variant && variant !== 'Única' ? `${product} · ${variant}` : product);
     const lowStock = stocks
       .filter(s => Number(s.quantity) <= Number(s.minQuantity))
-      .map(s => ({ variantId: s.variantId, name: label(s.variant.product.name, s.variant.name), sku: s.variant.sku,
+      .map(s => ({ branchId: s.branchId, branchName: s.branch.name, variantId: s.variantId, name: label(s.variant.product.name, s.variant.name), sku: s.variant.sku,
         quantity: Number(s.quantity), minQuantity: Number(s.minQuantity) }))
       .sort((a, b) => (a.quantity - a.minQuantity) - (b.quantity - b.minQuantity));
 
@@ -135,6 +136,41 @@ export class ReportService {
       }),
       openSessions,
       lowStock: lowStock.slice(0, 10), lowStockCount: lowStock.length,
+    };
+  }
+
+  /**
+   * Vista de todas las sucursales del usuario: el mismo resumen sumado y una fila
+   * por sucursal (hoy, 7 días, cajas abiertas, por reponer) para comparar.
+   */
+  async getOverview(branchIds: string[], now = new Date()) {
+    const totals = await this.getDashboard(branchIds, now);
+    const branches = await this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+    const today = chileDay(now);
+    const todayStart = chileDayStart(today), todayEnd = chileDayStart(nextDay(today));
+    const weekStart = chileDayStart(totals.last7Days[0]!.day);
+    const sums = (from: Date) => this.prisma.salesDocument.groupBy({
+      by: ['branchId', 'docType'], where: { branchId: { in: branchIds }, status: 'ISSUED', createdAt: { gte: from, lt: todayEnd } },
+      _sum: { total: true }, _count: { _all: true },
+    });
+    const [todayRows, weekRows] = await Promise.all([sums(todayStart), sums(weekStart)]);
+    const net = (rows: typeof todayRows, id: string) => rows.filter(r => r.branchId === id)
+      .reduce((n, r) => n + (r.docType === 'CREDIT_NOTE' ? -1 : 1) * Number(r._sum.total ?? 0), 0);
+    const count = (rows: typeof todayRows, id: string) => rows.filter(r => r.branchId === id && r.docType !== 'CREDIT_NOTE')
+      .reduce((n, r) => n + r._count._all, 0);
+    // lowStock del resumen viene recortado a 10; el conteo por sucursal se hace aparte.
+    const lowByBranch = await this.prisma.$queryRaw<{ branchId: string; n: bigint }[]>`
+      SELECT s."branchId", COUNT(*)::bigint AS n FROM stocks s JOIN variants v ON v.id = s."variantId"
+      WHERE s."branchId" = ANY(${branchIds}) AND s."minQuantity" IS NOT NULL AND s.quantity <= s."minQuantity" AND v."isActive"
+      GROUP BY s."branchId"`;
+    return {
+      ...totals,
+      branches: branches.map(b => ({
+        branchId: b.id, name: b.name,
+        todayNet: net(todayRows, b.id), todayTransactions: count(todayRows, b.id), weekNet: net(weekRows, b.id),
+        openRegisters: totals.openSessions.filter(s => s.branchId === b.id).length,
+        lowStockCount: Number(lowByBranch.find(l => l.branchId === b.id)?.n ?? 0),
+      })),
     };
   }
 

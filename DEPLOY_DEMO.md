@@ -46,7 +46,8 @@ Contraseñas (mínimo 10 caracteres): cada usuario la cambia en el menú → **C
 - El CSP de `vercel.json` permite llamar solo a `*.onrender.com`. Si mueves la API a otro dominio, agrégalo en `connect-src`.
 - En celular el menú se abre con el botón ☰ arriba a la izquierda; en el POS se alterna entre **Productos** y **Carrito** con la barra inferior.
 - El escáner de códigos usa la cámara: funciona solo en HTTPS (Vercel lo es) y el navegador pide permiso la primera vez. En iPhone usa una librería que se descarga al abrir el escáner.
-- El comprobante (`/comprobante/:id`, botón **Comprobante** en Ventas o tras cobrar) se imprime en térmica de 58/80 mm o se guarda como PDF desde Imprimir. **No es un documento tributario.** Nombre, RUT y dirección salen de la tabla `companies` / `branches` (hoy los del seed: edítalos en Neon > SQL Editor).
+- El comprobante (`/comprobante/:id`, botón **Comprobante** en Ventas o tras cobrar) se imprime en térmica de 58/80 mm o se guarda como PDF desde Imprimir. **No es un documento tributario.** Nombre, RUT y dirección se editan en **Empresa y locales** (solo ADMIN).
+- Sucursales y cajas se crean en **Empresa y locales**; después, en **Usuarios → Acceso**, asigna la sucursal a encargados y cajeros.
 - Admin y encargado entran sin caja (a Inicio); la caja se elige solo para vender. Una caja abierta por otra persona se puede revisar y cerrar, no usar para vender.
 - La sesión se renueva sola mientras se usa la app; a los 7 días desde el login pide la contraseña de nuevo.
 - DTE simulado y datos ficticios: es una demo.

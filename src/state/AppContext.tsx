@@ -10,6 +10,8 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** Vuelve a leer sucursales y cajas (tras crear o editar en "Empresa y locales"). */
+  reloadBranches: () => Promise<void>;
 
   // Location
   branches: Branch[];
@@ -171,6 +173,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     apiClient.logout().catch(() => undefined).finally(clearSession);
   }, [clearSession]);
 
+  const reloadBranches = useCallback(async () => {
+    const list = await apiClient.getBranches();
+    setBranches(list);
+    setSelectedBranch((current) => (current ? list.find((b) => b.id === current.id) ?? list[0] ?? null : current));
+    if (selectedBranch) setCashRegisters(await apiClient.getCashRegisters(selectedBranch.id));
+  }, [selectedBranch]);
+
   // Renovación del token: el cliente HTTP la hace al usar la API; esto cubre la pestaña
   // abierta sin uso (al volver a ella y cada 15 min) y actualiza rol/sucursales.
   useEffect(() => {
@@ -229,6 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       changePassword,
+      reloadBranches,
       branches,
       selectedBranch,
       setSelectedBranch,

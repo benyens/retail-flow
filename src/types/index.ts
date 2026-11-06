@@ -15,6 +15,17 @@ export interface Branch {
   isActive: boolean;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+  rut: string;
+  address: string;
+}
+
+export interface BranchWithRegisters extends Branch {
+  cashRegisters: CashRegister[];
+}
+
 export interface CashRegister {
   id: string;
   branchId: string;
@@ -42,6 +53,8 @@ export interface CashSession {
 /** Sesión abierta con quién la abrió y lo vendido (ventas − notas de crédito). */
 export interface OpenCashSession extends CashSession {
   registerName: string;
+  branchId: string;
+  branchName: string;
   userName: string;
   salesCount: number;
   salesNet: number;
@@ -218,8 +231,13 @@ export interface Dashboard {
   weekNet: number;
   topProducts: { variantId: string; name: string; quantity: number; total: number }[];
   openSessions: OpenCashSession[];
-  lowStock: { variantId: string; name: string; sku: string; quantity: number; minQuantity: number }[];
+  lowStock: { branchId: string; branchName: string; variantId: string; name: string; sku: string; quantity: number; minQuantity: number }[];
   lowStockCount: number;
+}
+
+/** Resumen de todas las sucursales del usuario, con una fila por sucursal. */
+export interface Overview extends Dashboard {
+  branches: { branchId: string; name: string; todayNet: number; todayTransactions: number; weekNet: number; openRegisters: number; lowStockCount: number }[];
 }
 
 export interface AuditFilters {

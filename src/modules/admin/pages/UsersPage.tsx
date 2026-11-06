@@ -29,6 +29,30 @@ export default function UsersPage() {
   const [resetUser, setResetUser] = useState<User | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [accessUser, setAccessUser] = useState<User | null>(null);
+  const [accessRole, setAccessRole] = useState<UserRole>("CASHIER");
+  const [accessBranches, setAccessBranches] = useState<string[]>([]);
+  const [isSavingAccess, setIsSavingAccess] = useState(false);
+
+  function openAccess(u: User) {
+    setAccessUser(u); setAccessRole(u.role); setAccessBranches(u.branchIds);
+  }
+
+  async function saveAccess() {
+    if (!accessUser) return;
+    if (accessBranches.length === 0) { toast.error("Elige al menos una sucursal"); return; }
+    setIsSavingAccess(true);
+    try {
+      await apiClient.updateUser(accessUser.id, { role: accessRole, branchIds: accessBranches });
+      toast.success(`Acceso de ${accessUser.name} actualizado. Lo verá en su próximo uso.`);
+      setAccessUser(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo actualizar el acceso");
+    } finally {
+      setIsSavingAccess(false);
+    }
+  }
 
   async function load() {
     setIsLoading(true);
@@ -144,6 +168,7 @@ export default function UsersPage() {
                   <TableCell data-label="Sucursales" className="text-muted-foreground text-sm">{u.branchIds.map((id) => branches.find((b) => b.id === id)?.name ?? id).join(", ") || "—"}</TableCell>
                   <TableCell data-label="Estado"><Badge variant={u.isActive ? "default" : "secondary"}>{u.isActive ? "Activo" : "Inactivo"}</Badge></TableCell>
                   <TableCell data-label="" className="text-right whitespace-nowrap space-x-2">
+                    <Button size="sm" variant="outline" onClick={() => openAccess(u)} aria-label={`Editar rol y sucursales de ${u.name}`}>Acceso</Button>
                     <Button size="sm" variant="outline" onClick={() => { setResetUser(u); setResetPassword(""); }} aria-label={`Cambiar contraseña de ${u.name}`}>
                       <KeyRound className="h-4 w-4 mr-1" aria-hidden="true" />Contraseña
                     </Button>
@@ -157,6 +182,41 @@ export default function UsersPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={accessUser !== null} onOpenChange={(open) => { if (!open) setAccessUser(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(e) => { e.preventDefault(); saveAccess(); }} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Rol y sucursales</DialogTitle>
+              <DialogDescription>{accessUser?.name} ({accessUser?.email})</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1">
+              <Label>Rol</Label>
+              <Select value={accessRole} onValueChange={(v) => setAccessRole(v as UserRole)} disabled={accessUser?.id === auth.user?.id}>
+                <SelectTrigger aria-label="Rol"><SelectValue /></SelectTrigger>
+                <SelectContent>{(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (<SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>))}</SelectContent>
+              </Select>
+              {accessUser?.id === auth.user?.id && <p className="text-xs text-muted-foreground">No puedes cambiar tu propio rol.</p>}
+            </div>
+            <div className="space-y-1">
+              <Label>Sucursales con acceso</Label>
+              <div className="flex flex-wrap gap-2">
+                {branches.map((b) => (
+                  <Button key={b.id} type="button" size="sm" aria-pressed={accessBranches.includes(b.id)}
+                    variant={accessBranches.includes(b.id) ? "default" : "outline"}
+                    onClick={() => setAccessBranches((prev) => prev.includes(b.id) ? prev.filter((x) => x !== b.id) : [...prev, b.id])}>
+                    {b.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setAccessUser(null)} disabled={isSavingAccess}>Cancelar</Button>
+              <Button type="submit" disabled={isSavingAccess}>{isSavingAccess ? "Guardando…" : "Guardar"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={resetUser !== null} onOpenChange={(open) => { if (!open) setResetUser(null); }}>
         <DialogContent className="sm:max-w-md">

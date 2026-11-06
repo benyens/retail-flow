@@ -97,6 +97,7 @@ export class HttpApiClient implements ApiClient {
     return get(`/reports/sales${qs({ branchId, ...stringify(filters) })}`);
   }
   getDashboard(branchId: string): Promise<import('@/types').Dashboard> { return get(`/reports/dashboard${qs({ branchId })}`); }
+  getOverview(): Promise<import('@/types').Overview> { return get("/reports/overview"); }
   searchPurchases(branchId: string, filters: import('@/types').PurchaseSearchFilters): Promise<import('@/types').PurchaseSearchResult> {
     return get(`/purchases/search${qs({ branchId, ...stringify(filters) })}`);
   }
@@ -109,6 +110,13 @@ export class HttpApiClient implements ApiClient {
 
   getBranches(): Promise<Branch[]> { return get<Branch[]>("/branches"); }
   getCashRegisters(branchId: string): Promise<CashRegister[]> { return get<CashRegister[]>(`/cash-registers${qs({ branchId })}`); }
+  getCompany(): Promise<import('@/types').Company> { return get("/company"); }
+  updateCompany(p: Partial<Omit<import('@/types').Company, 'id'>>): Promise<import('@/types').Company> { return patch("/company", p); }
+  listAllBranches(): Promise<import('@/types').BranchWithRegisters[]> { return get("/organization/branches"); }
+  createBranch(input: { name: string; address: string }): Promise<import('@/types').BranchWithRegisters> { return post("/organization/branches", input); }
+  updateBranch(id: string, p: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters> { return patch(`/organization/branches/${id}`, p); }
+  createCashRegister(branchId: string, input: { name: string; code: string }): Promise<CashRegister> { return post(`/organization/branches/${branchId}/registers`, input); }
+  updateCashRegister(id: string, p: Partial<{ name: string; code: string; isActive: boolean }>): Promise<CashRegister> { return patch(`/organization/registers/${id}`, p); }
 
   openCashSession(cashRegisterId: string, initialFund: number): Promise<CashSession> { return post<CashSession>("/cash-sessions", { cashRegisterId, initialFund }); }
   getOpenSessions(branchId: string): Promise<import('@/types').OpenCashSession[]> { return get(`/cash-sessions/open${qs({ branchId })}`); }

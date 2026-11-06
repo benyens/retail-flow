@@ -40,6 +40,11 @@ export async function reportsRoutes(fastify: FastifyInstance) {
     return reportService.getSalesReport(parsed.data.branchId, parsed.data);
   });
 
+  // Todas las sucursales a las que el usuario tiene acceso (authenticate ya las filtró a activas).
+  fastify.get('/api/v1/reports/overview', { preHandler: [fastify.authenticate, fastify.authorize(['ADMIN', 'MANAGER'])] }, async (request) => {
+    return reportService.getOverview(request.user.branchIds);
+  });
+
   fastify.get('/api/v1/reports/dashboard', { preHandler: [fastify.authenticate, fastify.authorize(['ADMIN', 'MANAGER'])] }, async (request, reply) => {
     const parsed = z.object({ branchId: z.string().min(1) }).safeParse(request.query);
     if (!parsed.success) return reply.status(422).send({ error: 'VALIDATION_ERROR', message: 'branchId es requerido' });

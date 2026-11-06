@@ -81,6 +81,52 @@ function generateAutoSku(productName: string, variantName?: string): string {
 
 export class MockApiClient implements ApiClient {
   async getPriceLists() { return [...PRICE_LISTS]; }
+  async getOverview(): Promise<import('@/types').Overview> {
+    const branches = await this.getBranches();
+    const parts = await Promise.all(branches.map(b => this.getDashboard(b.id)));
+    const base = parts[0];
+    return { ...base,
+      weekNet: parts.reduce((n, p) => n + p.weekNet, 0),
+      branches: branches.map((b, i) => ({ branchId: b.id, name: b.name, todayNet: parts[i].today.net, todayTransactions: parts[i].today.transactions,
+        weekNet: parts[i].weekNet, openRegisters: parts[i].openSessions.length, lowStockCount: parts[i].lowStockCount })) };
+  }
+
+  private company = { id: 'mock-company', name: 'Comercial Demo SpA', rut: '76.123.456-7', address: 'Av. Siempre Viva 123' };
+  async getCompany() { await delay(100); return { ...this.company }; }
+  async updateCompany(patch: Partial<Omit<import('@/types').Company, 'id'>>) { await delay(150); Object.assign(this.company, patch); return { ...this.company }; }
+  async listAllBranches(): Promise<import('@/types').BranchWithRegisters[]> {
+    await delay(150);
+    return BRANCHES.map(b => ({ ...b, cashRegisters: CASH_REGISTERS.filter(r => r.branchId === b.id) }));
+  }
+  async createBranch(input: { name: string; address: string }): Promise<import('@/types').BranchWithRegisters> {
+    await delay(150);
+    const branch = { id: `branch-${Date.now()}`, companyId: this.company.id, ...input, isActive: true };
+    BRANCHES.push(branch);
+    const register = { id: `reg-${Date.now()}`, branchId: branch.id, name: 'Caja 1', code: 'C1', isActive: true };
+    CASH_REGISTERS.push(register);
+    return { ...branch, cashRegisters: [register] };
+  }
+  async updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters> {
+    await delay(150);
+    const b = BRANCHES.find(b => b.id === id);
+    if (!b) throw new Error('Sucursal no encontrada');
+    Object.assign(b, patch);
+    return { ...b, cashRegisters: CASH_REGISTERS.filter(r => r.branchId === id) };
+  }
+  async createCashRegister(branchId: string, input: { name: string; code: string }): Promise<CashRegister> {
+    await delay(150);
+    const r = { id: `reg-${Date.now()}`, branchId, ...input, isActive: true };
+    CASH_REGISTERS.push(r);
+    return r;
+  }
+  async updateCashRegister(id: string, patch: Partial<{ name: string; code: string; isActive: boolean }>): Promise<CashRegister> {
+    await delay(150);
+    const r = CASH_REGISTERS.find(r => r.id === id);
+    if (!r) throw new Error('Caja no encontrada');
+    Object.assign(r, patch);
+    return { ...r };
+  }
+
   async getDashboard(branchId: string): Promise<import('@/types').Dashboard> {
     const chileDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const days = Array.from({ length: 7 }, (_, i) => chileDay(new Date(Date.now() - (6 - i) * 86400000)));
@@ -89,7 +135,7 @@ export class MockApiClient implements ApiClient {
     const stock = mockState.stock.filter(s => s.branchId === branchId && s.minQuantity != null && s.quantity <= s.minQuantity);
     const lowStock = stock.map(s => {
       const v = mockState.variants.find(v => v.id === s.variantId);
-      return { variantId: s.variantId, name: v?.name ?? s.variantId, sku: v?.sku ?? '', quantity: s.quantity, minQuantity: s.minQuantity ?? 0 };
+      return { branchId, branchName: BRANCHES.find(b => b.id === branchId)?.name ?? '', variantId: s.variantId, name: v?.name ?? s.variantId, sku: v?.sku ?? '', quantity: s.quantity, minQuantity: s.minQuantity ?? 0 };
     });
     return { today: last7Days[6], yesterday: last7Days[5], last7Days, weekNet: last7Days.reduce((n, d) => n + d.net, 0),
       topProducts: [], openSessions: [], lowStock: lowStock.slice(0, 10), lowStockCount: lowStock.length };
@@ -225,7 +271,8 @@ export class MockApiClient implements ApiClient {
     await delay(150);
     return mockState.cashSessions
       .filter(s => s.status === 'OPEN' && CASH_REGISTERS.find(r => r.id === s.cashRegisterId)?.branchId === branchId)
-      .map(s => ({ ...s, registerName: CASH_REGISTERS.find(r => r.id === s.cashRegisterId)?.name ?? '',
+      .map(s => ({ ...s, registerName: CASH_REGISTERS.find(r => r.id === s.cashRegisterId)?.name ?? '', branchId,
+        branchName: BRANCHES.find(b => b.id === branchId)?.name ?? '',
         userName: mockState.users.find(u => u.id === s.userId)?.name ?? '', salesCount: 0, salesNet: 0 }));
   }
 

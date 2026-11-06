@@ -51,6 +51,7 @@ Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma
 
 - `auth/` — login/logout/refresh/change-password. JWT de 12 h con claim `authTime`; `/auth/refresh` emite uno nuevo hasta 7 días desde el login (`MAX_SESSION_SECONDS`). El cliente renueva cuando quedan < 4 h (`utils/session.ts`, `httpApiClient.maybeRefresh`, `AppContext`). Login: límite 10/min por IP y 5/min por cuenta, correo sin distinguir mayúsculas, tiempo constante exista o no la cuenta. `users.tokensValidAfter` invalida los JWT emitidos antes de un cambio o reset de contraseña (lo revisa `plugins/auth.ts`).
 - `lookups/` — branches, cash registers, product categories (listas simples).
+- `organization/` — empresa (datos del comprobante), alta/edición de sucursales y cajas, solo ADMIN. Una sucursal nueva trae `Caja 1` y se asigna a todos los ADMIN activos; no se desactiva una caja o sucursal con sesiones abiertas (409).
 - `catalog/` — products, variant groups, variants, `createQuickProduct`, precios, escalones mayoristas.
 - `stock/` — inventario, movimientos, ajustes.
 - `cash/` — sesiones de caja, cierre con arqueo, movimientos.
@@ -103,7 +104,8 @@ Corre ambos después de cualquier cambio. La generación Prisma, migración inic
 
 ## Funciones recientes (frontend)
 
-- `/inicio` (`DashboardPage`): ADMIN/MANAGER entran ahí; CASHIER va a `/pos`.
+- `/inicio` (`DashboardPage`): ADMIN/MANAGER entran ahí; CASHIER va a `/pos`. Con más de una sucursal hay pestaña "Todas las sucursales" (`GET /reports/overview`, usa las sucursales del usuario) con fila por sucursal.
+- `/admin/sucursales` (`OrganizationPage`, solo ADMIN): empresa, sucursales y cajas. En Usuarios, "Acceso" edita rol y sucursales de un usuario existente.
 - Cajas: el CASHIER elige sucursal y caja al entrar. ADMIN/MANAGER solo sucursal; `RegisterGate` pide caja en `/pos`, `/pos/movimientos` y `/pos/cerrar` y muestra quién tiene cada una abierta (`GET /cash-sessions/open`). Nadie vende en una sesión que abrió otra persona (409 en `createSale`); un supervisor sí puede revisarla y cerrarla.
 - Stock mínimo por sucursal (`Stock.minQuantity`, `PUT /stock/minimum`); "por reponer" = `isLowStock` en `utils/stock.ts`. `StockPage` acepta `?filtro=reponer|sin-stock`.
 - `BarcodeScanButton`: `BarcodeDetector` nativo o `@zxing/browser` cargado bajo demanda. `vercel.json` permite `camera=(self)`.

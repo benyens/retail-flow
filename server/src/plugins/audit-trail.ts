@@ -11,10 +11,15 @@ import { AuditService } from "../modules/reports/audit.service.js";
  * - Al responder con éxito se registra la acción con el estado posterior.
  * Un fallo al auditar se registra en el log y no rompe la operación ya hecha.
  */
-type Model = "product" | "variantGroup" | "variant" | "wholesaleTier" | "productCategory" | "supplier" | "employee" | "customer";
+type Model = "company" | "branch" | "cashRegister" | "product" | "variantGroup" | "variant" | "wholesaleTier" | "productCategory" | "supplier" | "employee" | "customer";
 type Rule = { action: string; entityType: string; model: Model };
 
 const RULES: Record<string, Rule> = {
+  "PATCH /api/v1/company": { action: "UPDATE_COMPANY", entityType: "Company", model: "company" },
+  "POST /api/v1/organization/branches": { action: "CREATE_BRANCH", entityType: "Branch", model: "branch" },
+  "PATCH /api/v1/organization/branches/:id": { action: "UPDATE_BRANCH", entityType: "Branch", model: "branch" },
+  "POST /api/v1/organization/branches/:id/registers": { action: "CREATE_CASH_REGISTER", entityType: "CashRegister", model: "cashRegister" },
+  "PATCH /api/v1/organization/registers/:id": { action: "UPDATE_CASH_REGISTER", entityType: "CashRegister", model: "cashRegister" },
   "POST /api/v1/products": { action: "CREATE_PRODUCT", entityType: "Product", model: "product" },
   "POST /api/v1/products/quick": { action: "CREATE_QUICK_PRODUCT", entityType: "Variant", model: "variant" },
   "PATCH /api/v1/products/:id": { action: "UPDATE_PRODUCT", entityType: "Product", model: "product" },
@@ -79,7 +84,10 @@ export default fp(async (fastify: FastifyInstance) => {
     if (typeof payload === "string" && payload) {
       try { after = JSON.parse(payload); } catch { after = undefined; }
     }
-    const id = (req.params as { id?: string } | undefined)?.id ?? (after as { id?: string } | undefined)?.id;
+    // En un POST el registro creado es la respuesta (el :id de la URL puede ser el padre).
+    const createdId = (after as { id?: string } | undefined)?.id;
+    const paramId = (req.params as { id?: string } | undefined)?.id;
+    const id = req.method === "POST" ? createdId ?? paramId : paramId ?? createdId;
     if (!id) return payload;
     await AuditService.log(fastify.prisma, {
       userId: req.user.sub, action: rule.action, entityType: rule.entityType, entityId: id,

@@ -60,10 +60,11 @@ export class CashService {
   }
 
   /** Sesiones abiertas de una sucursal, con quién la abrió y lo vendido hasta ahora. */
-  async listOpenSessions(branchId: string) {
+  async listOpenSessions(branch: string | string[]) {
+    const branchIds = Array.isArray(branch) ? branch : [branch];
     const sessions = await this.prisma.cashSession.findMany({
-      where: { status: "OPEN", cashRegister: { branchId } },
-      include: { cashRegister: { select: { name: true } } },
+      where: { status: "OPEN", cashRegister: { branchId: { in: branchIds } } },
+      include: { cashRegister: { select: { name: true, branchId: true, branch: { select: { name: true } } } } },
       orderBy: { openedAt: "asc" },
     });
     const users = await this.prisma.user.findMany({ where: { id: { in: sessions.map(s => s.userId) } }, select: { id: true, name: true } });
@@ -78,7 +79,7 @@ export class CashService {
       const sales = mine.filter(t => t.docType !== "CREDIT_NOTE");
       const refunds = mine.filter(t => t.docType === "CREDIT_NOTE").reduce((n, t) => n + Number(t._sum.total ?? 0), 0);
       return {
-        ...toCashSessionDTO(s), registerName: s.cashRegister.name, userName: userName.get(s.userId) ?? "",
+        ...toCashSessionDTO(s), registerName: s.cashRegister.name, branchId: s.cashRegister.branchId, branchName: s.cashRegister.branch.name, userName: userName.get(s.userId) ?? "",
         salesCount: sales.reduce((n, t) => n + t._count._all, 0),
         salesNet: sales.reduce((n, t) => n + Number(t._sum.total ?? 0), 0) - refunds,
       };

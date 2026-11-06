@@ -107,6 +107,26 @@ try {
   await req(manager.token, 'GET', `/purchases?branchId=${a.id}`, undefined, 403);
   await app.prisma.user.update({ where: { id: cashier.user.id }, data: { isActive: false } });
   await req(cashier.token, 'GET', '/branches', undefined, 401);
+  // Empresa, sucursales y cajas: solo ADMIN; la sucursal nueva trae Caja 1 y queda asignada a los admins.
+  await req(manager.token, 'GET', '/organization/branches', undefined, 403);
+  await req(manager.token, 'PATCH', '/company', { name: 'x' }, 403);
+  const nb = await req(admin.token, 'POST', '/organization/branches', { name: `${run}-NEW`, address: 'Calle 1' }, 201);
+  assert.equal(nb.cashRegisters.length, 1); assert.equal(nb.cashRegisters[0].code, 'C1');
+  const adminBranches = await req(admin.token, 'GET', '/branches');
+  assert.ok(adminBranches.some((x: { id: string }) => x.id === nb.id));
+  await req(admin.token, 'POST', `/organization/branches/${nb.id}/registers`, { name: 'Otra', code: 'C1' }, 409);
+  const reg2 = await req(admin.token, 'POST', `/organization/branches/${nb.id}/registers`, { name: 'Caja 2', code: 'C2' }, 201);
+  const nbSession = await req(admin.token, 'POST', '/cash-sessions', { cashRegisterId: reg2.id, initialFund: 0 }, 201);
+  await req(admin.token, 'PATCH', `/organization/registers/${reg2.id}`, { isActive: false }, 409);
+  await req(admin.token, 'PATCH', `/organization/branches/${nb.id}`, { isActive: false }, 409);
+  const overview = await req(admin.token, 'GET', '/reports/overview');
+  assert.ok(overview.branches.some((x: { branchId: string; openRegisters: number }) => x.branchId === nb.id && x.openRegisters === 1));
+  await req(admin.token, 'POST', `/cash-sessions/${nbSession.id}/close`, { declaredCash: 0 });
+  await req(admin.token, 'PATCH', `/organization/branches/${nb.id}`, { isActive: false });
+  const orgAudit = await req(admin.token, 'GET', `/audit-logs?entityType=CashRegister&entityId=${reg2.id}`);
+  assert.deepEqual(orgAudit.map((l: { action: string }) => l.action), ['CREATE_CASH_REGISTER']);
+  assertions += 16;
+
   // Límite por cuenta: 5 intentos por minuto aunque cambie la IP.
   for (let i = 0; i < 6; i++) {
     const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: `127.0.1.${i}`, payload: { email: `nobody-${run}@test.local`, password: 'wrong' } });

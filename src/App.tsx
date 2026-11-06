@@ -26,6 +26,7 @@ const StockPage = lazy(() => import("@/modules/admin/pages/StockPage"));
 const EmployeesPage = lazy(() => import("@/modules/admin/pages/EmployeesPage"));
 const ReceiptPage = lazy(() => import("@/pages/ReceiptPage"));
 const DashboardPage = lazy(() => import("@/modules/admin/pages/DashboardPage"));
+const OrganizationPage = lazy(() => import("@/modules/admin/pages/OrganizationPage"));
 const UsersPage = lazy(() => import("@/modules/admin/pages/UsersPage"));
 
 const queryClient = new QueryClient();
@@ -100,6 +101,7 @@ function AppRoutes() {
         <Route element={<AdminRoute onlyAdmin />}>
           <Route path="admin/audit" element={<AuditPage />} />
           <Route path="admin/users" element={<UsersPage />} />
+          <Route path="admin/sucursales" element={<OrganizationPage />} />
         </Route>
       </Route>
       

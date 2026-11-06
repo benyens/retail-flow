@@ -1,3 +1,4 @@
+import { organizationRoutes } from "./modules/organization/organization.routes.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from '@fastify/rate-limit';
@@ -97,6 +98,7 @@ export async function buildApp() {
   await app.register(employeesRoutes);
   await app.register(usersRoutes);
   await app.register(reportsRoutes);
+  await app.register(organizationRoutes);
 
   app.get("/health", async () => ({ status: "ok" }));
 
