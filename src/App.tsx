@@ -1,34 +1,37 @@
-import { useEffect, useRef } from "react";
-import AuditPage from "@/modules/admin/pages/AuditPage";
+import { lazy, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "@/state/AppContext";
 import LoginPage from "@/pages/LoginPage";
 import MainLayout from "@/components/layout/MainLayout";
 import POSPage from "@/modules/pos/pages/POSPage";
 import NotFound from "./pages/NotFound";
-import SalesHistoryPage from "./modules/pos/pages/SalesHistoryPage";  
-import CashMovementsPage from "@/modules/pos/pages/CashMovementsPage";
-import CashClosePage from "@/modules/pos/pages/CashClosePage";
-import WholesalePage from "@/modules/admin/pages/WholesalePage";
-import PriceManagementPage from "@/modules/admin/pages/PriceManagmentPage";
-import ProductCatalogPage from "@/modules/admin/pages/ProductCatalogPage";
-import PurchaseEntryPage from "@/modules/purchases/pages/PurchaseEntryPage";
-import PurchaseListPage from "@/modules/purchases/pages/PurchaseListPage";
-import ReportsPage from "@/modules/admin/pages/ReportsPage";
-import StockPage from "@/modules/admin/pages/StockPage";
-import EmployeesPage from "@/modules/admin/pages/EmployeesPage";
-import UsersPage from "@/modules/admin/pages/UsersPage";
+// Las páginas secundarias se cargan al abrirlas: el POS y el login abren más rápido
+// (sobre todo en celular), y librerías pesadas como la de Excel no van en la carga inicial.
+const AuditPage = lazy(() => import("@/modules/admin/pages/AuditPage"));
+const SalesHistoryPage = lazy(() => import("./modules/pos/pages/SalesHistoryPage"));
+const CashMovementsPage = lazy(() => import("@/modules/pos/pages/CashMovementsPage"));
+const CashClosePage = lazy(() => import("@/modules/pos/pages/CashClosePage"));
+const WholesalePage = lazy(() => import("@/modules/admin/pages/WholesalePage"));
+const PriceManagementPage = lazy(() => import("@/modules/admin/pages/PriceManagmentPage"));
+const ProductCatalogPage = lazy(() => import("@/modules/admin/pages/ProductCatalogPage"));
+const PurchaseEntryPage = lazy(() => import("@/modules/purchases/pages/PurchaseEntryPage"));
+const PurchaseListPage = lazy(() => import("@/modules/purchases/pages/PurchaseListPage"));
+const ReportsPage = lazy(() => import("@/modules/admin/pages/ReportsPage"));
+const StockPage = lazy(() => import("@/modules/admin/pages/StockPage"));
+const EmployeesPage = lazy(() => import("@/modules/admin/pages/EmployeesPage"));
+const UsersPage = lazy(() => import("@/modules/admin/pages/UsersPage"));
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { auth } = useApp();
+  const location = useLocation();
   if (!auth.isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
   return <>{children}</>;
 }
@@ -41,13 +44,17 @@ function AdminRoute({ onlyAdmin = false }: { onlyAdmin?: boolean }) {
 
 function AppRoutes() {
   const { auth } = useApp();
+  const location = useLocation();
+  // Tras iniciar sesión vuelve a la página que se intentaba abrir (solo rutas internas).
+  const from = (location.state as { from?: string } | null)?.from;
+  const redirectAfterLogin = from && from.startsWith('/') && !from.startsWith('//') && from !== '/login' ? from : '/pos';
   const previousUser = useRef(auth.user?.id);
   useEffect(() => { if (previousUser.current !== auth.user?.id) { queryClient.clear(); previousUser.current = auth.user?.id; } }, [auth.user?.id]);
 
   return (
     <Routes>
       <Route path="/login" element={
-        auth.isAuthenticated ? <Navigate to="/pos" replace /> : <LoginPage />
+        auth.isAuthenticated ? <Navigate to={redirectAfterLogin} replace /> : <LoginPage />
       } />
       
       <Route path="/" element={

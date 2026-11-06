@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL?.trim() || 'admin@retailflow.local';
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() || 'admin@retailflow.local';
   const password = process.env.SEED_ADMIN_PASSWORD || 'admin1234';
   if (process.env.NODE_ENV === 'production' &&
       (!process.env.SEED_ADMIN_EMAIL || !email.includes('@') || !process.env.SEED_ADMIN_PASSWORD || password.length < 16 || password === 'admin1234')) {

@@ -49,6 +49,8 @@ model User {
   role         UserRole @default(CASHIER)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
+  /// Tokens emitidos antes de esta fecha se rechazan (cambio/reset de contraseña).
+  tokensValidAfter DateTime?
 
   branches UserBranch[]
 

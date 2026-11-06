@@ -49,7 +49,7 @@ Para volver al modo mock (sin backend): `VITE_USE_MOCK=true` o borrar `.env.loca
 
 Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma) + `X.routes.ts` (Fastify + Zod + wiring de permisos). Los servicios nunca importan Fastify; las rutas nunca hacen queries directas a Prisma.
 
-- `auth/` — login/logout, JWT (12h, sin refresh todavía).
+- `auth/` — login/logout/change-password, JWT (12h, sin refresh). Login: límite 10/min por IP y 5/min por cuenta, correo sin distinguir mayúsculas, tiempo constante exista o no la cuenta. `users.tokensValidAfter` invalida los JWT emitidos antes de un cambio o reset de contraseña (lo revisa `plugins/auth.ts`).
 - `lookups/` — branches, cash registers, product categories (listas simples).
 - `catalog/` — products, variant groups, variants, `createQuickProduct`, precios, escalones mayoristas.
 - `stock/` — inventario, movimientos, ajustes.
@@ -57,7 +57,7 @@ Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma
 - `sales/` — checkout del POS, anulación, notas de crédito, DTE stub.
 - `purchases/` — proveedores, facturas de compra (aplica stock al crear, no hay paso de "recepción" separado).
 - `employees/` — CRUD básico.
-- `users/` — CRUD, solo ADMIN.
+- `users/` — CRUD y reset de contraseña (`POST /users/:id/password`), solo ADMIN. Un ADMIN no puede quitarse el rol ni desactivarse, y siempre queda al menos un ADMIN activo (409).
 - `reports/` — reporte de ventas diario + `AuditService` (log de acciones sensibles) + auditoría.
 
 `prisma/schema.prisma` es la fuente de verdad del modelo de datos. Cada modelo está mapeado 1:1 contra los tipos de `src/types/index.ts` (mismos nombres de campo) — si un DTO no calza exacto con el tipo del frontend, es un bug.
@@ -92,16 +92,25 @@ npx tsc -p tsconfig.app.json --noEmit   # frontend, desde la raíz
 
 Corre ambos después de cualquier cambio. La generación Prisma, migración inicial y seed ya se verificaron contra PostgreSQL 16 local el 2026-09-13. Reporta cualquier fallo de migración o runtime aunque TypeScript pase.
 
+## Interfaz en celular
+
+- `MainLayout`: en `md` y más el `Sidebar` va fijo; en celular hay una barra superior con ☰ que abre el mismo `Sidebar` dentro de un `Sheet`. No vuelvas a poner un ancho fijo visible siempre.
+- `POSPage`: en celular muestra un panel a la vez (`mobilePanel`: productos/carrito) con barra inferior; en escritorio ambos lado a lado. Totales y **Pagar** quedan fijos al fondo del carrito.
+- Las páginas secundarias se cargan con `React.lazy` (ver `App.tsx`); `main.tsx` recarga una vez si tras un deploy falta un fragmento.
+- Diálogos (`components/ui/dialog.tsx`) limitan alto y ancho al viewport y hacen scroll interno.
+- Verificación visual: `/home/claude/qa/shots.py` (no versionado) o cualquier Playwright con `devices['iPhone 13']` y 1366×800.
+
 ## Qué NO hacer
 
 - No cambies el nombre de un campo en `src/types/index.ts` sin propagar el cambio al schema de Prisma, los DTOs de los servicios, y `httpApiClient.ts`. Los tres tienen que decir lo mismo.
 - No agregues autenticación/autorización distinta a los dos niveles que ya existen: `fastify.authenticate` (cualquier rol logueado) y `fastify.authorize(['ADMIN', ...])` (roles específicos). No inventes un tercer mecanismo.
-- No toques `AppContext.tsx` para "simplificar" el manejo del token — ya tiene un fix específico (rehidratación desde JWT decodificado al montar) que soluciona un bug real; no lo reviertas sin leer el comentario que lo explica ahí mismo.
+- No toques `AppContext.tsx` para "simplificar" el manejo del token: la sesión se lee de localStorage **antes del primer render** (`readStoredAuth` como inicializador de `useState`). Si se mueve a un `useEffect`, al recargar cualquier ruta protegida la app redirige a /login y pierde la página. El evento `auth:expired` (lo emite `httpApiClient` ante un 401 con sesión) limpia la sesión y muestra un aviso.
 - No conectes un proveedor real de DTE/SII sin que te lo pidan explícitamente — hoy es un stub a propósito y punto de extensión documentado, no una tarea pendiente implícita.
 
 ## Deploy (demo)
 
 - `server/scripts/start-cloud.mjs` valida env, normaliza `DATABASE_URL` de Neon, reintenta `migrate deploy` y opcionalmente corre el seed (`SEED_ON_START=true`). No lo simplifiques: cada paso cubre una falla real de Neon/Render.
-- `CORS_ORIGINS` es obligatorio en producción (la app no arranca sin él). `trustProxy` está activo por Render.
+- `CORS_ORIGINS` es obligatorio en producción (la app no arranca sin él). `trustProxy` confía solo en `TRUST_PROXY_HOPS` proxies (por defecto 1, Render); no lo cambies a `true`, porque permitiría falsear la IP con `X-Forwarded-For` y saltarse el límite de login.
+- Contraseñas: mínimo 10 caracteres (`passwordSchema` en `auth.routes.ts`), bcrypt costo 12. El frontend usa el mismo mínimo.
 - El frontend usa `VITE_API_BASE_URL` (sin `/api/v1`); en build de producción sin ella falla con mensaje explícito, nunca cae a localhost.
 - Credenciales `admin@pos.cl`/`admin123` son solo del modo mock.

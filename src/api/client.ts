@@ -43,6 +43,8 @@ export interface ApiClient {
   // Auth
   login(credentials: LoginCredentials): Promise<LoginResponse>;
   logout(): Promise<void>;
+  /** Cambia la contraseña propia. Cierra las demás sesiones y devuelve un token nuevo. */
+  changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }>;
   
   // Branches & Cash Registers
   getBranches(): Promise<Branch[]>;
@@ -173,6 +175,8 @@ export interface ApiClient {
   getUsers(): Promise<User[]>;
   createUser(user: Omit<User, 'id'> & { password: string }): Promise<User>;
   updateUser(id: string, user: Partial<User>): Promise<User>;
+  /** Solo ADMIN: asigna una contraseña nueva y cierra las sesiones de ese usuario. */
+  resetUserPassword(userId: string, newPassword: string): Promise<void>;
   
   // Reports
   getSalesReport(branchId: string, filters: import('@/types').SalesReportFilters): Promise<import('@/types').SalesReport>;

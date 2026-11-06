@@ -642,7 +642,7 @@ export default function PurchaseEntryPage() {
 
   // ----------------- RENDER -----------------
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <Button asChild variant="outline"><Link to="/admin/facturas">← Volver a facturas</Link></Button>
       <Card>
         <CardHeader>

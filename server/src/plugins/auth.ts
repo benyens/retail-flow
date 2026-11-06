@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 export interface JwtUserPayload {
   sub: string;
   jti?: string;
+  iat?: number;
   exp?: number;
   email: string;
   name: string;
@@ -50,6 +51,10 @@ export default fp(async (fastify: FastifyInstance) => {
     if (await sessions.isRevoked(token)) return reply.status(401).send({ error: 'UNAUTHENTICATED', message: 'Sesión cerrada' });
     const current = await access.currentUser(request.user.sub);
     if (!current?.isActive) return reply.status(401).send({ error: 'UNAUTHENTICATED', message: 'Usuario inactivo o inexistente' });
+    // Tras cambio o reset de contraseña, las sesiones anteriores dejan de valer.
+    if (current.tokensValidAfter && (request.user.iat ?? 0) * 1000 < current.tokensValidAfter.getTime()) {
+      return reply.status(401).send({ error: 'UNAUTHENTICATED', message: 'La sesión expiró por un cambio de contraseña' });
+    }
     request.user = { ...request.user, role: current.role,
       branchIds: current.branches.filter(b => b.branch.isActive).map(b => b.branchId) };
     if (!await access.canAccess(request.user, request.routeOptions.url ?? '',

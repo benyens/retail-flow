@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "../auth/auth.routes.js";
 import { AuditService } from "../reports/audit.service.js";
 
 function toUserDTO(u: { id: string; email: string; name: string; rut: string; role: string; isActive: boolean; branches: { branchId: string }[] }) {
@@ -19,10 +20,10 @@ export class UserService {
   }
 
   async createUser(input: { email: string; name: string; rut: string; role: "ADMIN" | "MANAGER" | "CASHIER"; branchIds: string[]; isActive: boolean; password: string }) {
-    const existing = await this.prisma.user.findUnique({ where: { email: input.email } });
+    const existing = await this.prisma.user.findFirst({ where: { email: { equals: input.email, mode: "insensitive" } } });
     if (existing) throw new UserConflictError("Ya existe un usuario con ese email");
 
-    const passwordHash = await bcrypt.hash(input.password, 10);
+    const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
@@ -43,6 +44,20 @@ export class UserService {
     performedBy: string,
   ) {
     const before = await this.prisma.user.findUniqueOrThrow({ where: { id }, include: { branches: true } });
+
+    if (patch.email && patch.email !== before.email) {
+      const taken = await this.prisma.user.findFirst({ where: { email: { equals: patch.email, mode: "insensitive" }, id: { not: id } } });
+      if (taken) throw new UserConflictError("Ya existe un usuario con ese email");
+    }
+    // Evita quedar fuera del sistema: un admin no puede quitarse a sí mismo el rol
+    // ni desactivarse, y siempre debe quedar al menos un ADMIN activo.
+    const losesAdmin = before.role === "ADMIN" && before.isActive &&
+      ((patch.role !== undefined && patch.role !== "ADMIN") || patch.isActive === false);
+    if (losesAdmin) {
+      if (id === performedBy) throw new UserConflictError("No puedes quitarte el rol de administrador ni desactivar tu propia cuenta");
+      const activeAdmins = await this.prisma.user.count({ where: { role: "ADMIN", isActive: true } });
+      if (activeAdmins <= 1) throw new UserConflictError("Debe quedar al menos un administrador activo");
+    }
 
     const user = await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -68,5 +83,15 @@ export class UserService {
       return tx.user.findUniqueOrThrow({ where: { id }, include: { branches: true } });
     });
     return toUserDTO(user);
+  }
+
+  /** Reset de contraseña por un ADMIN: invalida todas las sesiones del usuario. */
+  async resetPassword(id: string, newPassword: string, performedBy: string) {
+    await this.prisma.user.findUniqueOrThrow({ where: { id } });
+    const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(newPassword, BCRYPT_COST), tokensValidAfter: now } });
+      await AuditService.log(tx, { userId: performedBy, action: "RESET_USER_PASSWORD", entityType: "User", entityId: id });
+    });
   }
 }

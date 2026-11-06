@@ -2,7 +2,7 @@ import { useApp } from '@/state/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, Monitor, ArrowRight } from 'lucide-react';
+import { Building2, Monitor, LogOut } from 'lucide-react';
 
 export default function BranchSelector() {
   const {
@@ -12,10 +12,11 @@ export default function BranchSelector() {
     cashRegisters,
     selectedCashRegister,
     setSelectedCashRegister,
+    logout,
   } = useApp();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+    <div className="min-h-dvh flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-lg animate-scale-in">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Configuración de Punto de Venta</CardTitle>
@@ -24,8 +25,8 @@ export default function BranchSelector() {
         <CardContent className="space-y-6">
           {/* Branch Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Building2 className="w-4 h-4" />
+            <label id="branch-label" className="text-sm font-medium flex items-center gap-2">
+              <Building2 className="w-4 h-4" aria-hidden="true" />
               Sucursal
             </label>
             <Select
@@ -35,7 +36,7 @@ export default function BranchSelector() {
                 setSelectedBranch(branch || null);
               }}
             >
-              <SelectTrigger className="h-12">
+              <SelectTrigger className="h-12" aria-labelledby="branch-label">
                 <SelectValue placeholder="Seleccione una sucursal" />
               </SelectTrigger>
               <SelectContent>
@@ -54,8 +55,8 @@ export default function BranchSelector() {
           {/* Cash Register Selection */}
           {selectedBranch && (
             <div className="space-y-2 animate-fade-in">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Monitor className="w-4 h-4" />
+              <label id="register-label" className="text-sm font-medium flex items-center gap-2">
+                <Monitor className="w-4 h-4" aria-hidden="true" />
                 Caja
               </label>
               <Select
@@ -65,7 +66,7 @@ export default function BranchSelector() {
                   setSelectedCashRegister(register || null);
                 }}
               >
-                <SelectTrigger className="h-12">
+                <SelectTrigger className="h-12" aria-labelledby="register-label">
                   <SelectValue placeholder="Seleccione una caja" />
                 </SelectTrigger>
                 <SelectContent>
@@ -84,14 +85,21 @@ export default function BranchSelector() {
             </div>
           )}
 
-          {selectedBranch && selectedCashRegister && (
-            <div className="pt-4 animate-fade-in">
-              <Button className="w-full h-12 text-lg">
-                Continuar al POS
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </div>
+          {/* Al elegir la caja se entra directo al POS; aquí solo se avisan los casos sin opciones. */}
+          {branches.length === 0 && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Tu usuario no tiene sucursales asignadas. Pide a un administrador que te asigne una.
+            </p>
           )}
+          {selectedBranch && cashRegisters.length === 0 && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Esta sucursal no tiene cajas activas.
+            </p>
+          )}
+          <Button variant="ghost" className="w-full text-muted-foreground" onClick={logout}>
+            <LogOut className="w-4 h-4 mr-2" aria-hidden="true" />
+            Cerrar sesión
+          </Button>
         </CardContent>
       </Card>
     </div>

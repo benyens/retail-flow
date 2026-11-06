@@ -3,7 +3,7 @@ import { useApp } from '@/state/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Store, Lock, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,14 +24,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sidebar to-sidebar-accent p-4">
+    <div className="min-h-dvh flex items-center justify-center bg-gradient-to-br from-sidebar to-sidebar-accent p-4">
       <Card className="w-full max-w-md animate-scale-in">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center">
-            <Store className="w-8 h-8 text-primary-foreground" />
+            <Store className="w-8 h-8 text-primary-foreground" aria-hidden="true" />
           </div>
           <div>
-            <CardTitle className="text-2xl">Sistema POS</CardTitle>
+            <h1 className="text-2xl font-semibold leading-none tracking-tight">Sistema POS</h1>
             <CardDescription>Ingrese sus credenciales para continuar</CardDescription>
           </div>
         </CardHeader>
@@ -40,11 +40,16 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Label htmlFor="email">Correo electrónico</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="correo@ejemplo.cl"
+                  name="email"
+                  autoComplete="username"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="correo@ejemplo.cl…"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
@@ -55,10 +60,12 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
                 <Input
                   id="password"
                   type="password"
+                  name="password"
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -68,7 +75,7 @@ export default function LoginPage() {
               </div>
             </div>
             <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading}>
-              {isLoading ? 'Ingresando...' : 'Ingresar'}
+              {isLoading ? 'Ingresando…' : 'Ingresar'}
             </Button>
           </form>
           {import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true' && <div className="mt-6 p-4 bg-muted rounded-lg">

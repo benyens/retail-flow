@@ -30,7 +30,7 @@ export default function ReportsPage() {
   useEffect(() => { setPage(0); setDetailId(null); }, [selectedBranch?.id, from, to, docType, status, query]);
   const data = valid ? report.data : undefined;
   if (!selectedBranch) return <p className="p-8">Selecciona una sucursal.</p>;
-  return <div className="p-6 lg:p-8 space-y-6"><header><h1 className="text-2xl font-bold">Reportes de ventas</h1><p className="text-muted-foreground">{selectedBranch.name} · Fechas en horario de Chile</p></header>
+  return <div className="p-4 md:p-6 lg:p-8 space-y-6"><header><h1 className="text-2xl font-bold">Reportes de ventas</h1><p className="text-muted-foreground">{selectedBranch.name} · Fechas en horario de Chile</p></header>
     <Card><CardContent className="pt-6 grid gap-4 md:grid-cols-3"><Filter label="Desde"><Input type="date" value={from} onChange={e => setFrom(e.target.value)} /></Filter><Filter label="Hasta"><Input type="date" value={to} onChange={e => setTo(e.target.value)} /></Filter><Filter label="Buscar folio, cliente o RUT"><Input data-search-focus placeholder="Buscar · F1" value={query} onChange={e => setQuery(e.target.value)} /></Filter>
       <Filter label="Tipo de documento"><select className={selectClass} value={docType} onChange={e => setDocType(e.target.value)}><option value="">Todos</option>{Object.entries(types).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Filter>
       <Filter label="Estado"><select className={selectClass} value={status} onChange={e => setStatus(e.target.value)}><option value="">Todos</option>{Object.entries(statuses).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Filter>

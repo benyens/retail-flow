@@ -133,6 +133,16 @@ export class MockApiClient implements ApiClient {
     this.currentUserId = null;
   }
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }> {
+    await delay(300);
+    const user = mockState.users.find(u => u.id === this.currentUserId);
+    if (!user) throw new Error('Sesión no válida');
+    if (user.password !== currentPassword) throw new Error('La contraseña actual no es correcta');
+    if (newPassword.length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres');
+    user.password = newPassword;
+    return { token: `mock-token-${user.id}-${Date.now()}` };
+  }
+
   // ============ Branches & Cash Registers ============
   async getBranches(): Promise<Branch[]> {
     await delay(200);
@@ -1202,6 +1212,14 @@ export class MockApiClient implements ApiClient {
     mockState.users[index] = { ...mockState.users[index], ...user };
     const { password, ...userWithoutPassword } = mockState.users[index];
     return userWithoutPassword;
+  }
+
+  async resetUserPassword(userId: string, newPassword: string): Promise<void> {
+    await delay(300);
+    const user = mockState.users.find(u => u.id === userId);
+    if (!user) throw new Error('Usuario no encontrado');
+    if (newPassword.length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres');
+    user.password = newPassword;
   }
 
   // ============ Reports ============

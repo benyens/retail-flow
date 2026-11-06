@@ -82,8 +82,16 @@ try {
   await req(manager.token, 'GET', `/purchases?branchId=${a.id}`, undefined, 403);
   await app.prisma.user.update({ where: { id: cashier.user.id }, data: { isActive: false } });
   await req(cashier.token, 'GET', '/branches', undefined, 401);
+  // Límite por cuenta: 5 intentos por minuto aunque cambie la IP.
+  for (let i = 0; i < 6; i++) {
+    const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: `127.0.1.${i}`, payload: { email: `nobody-${run}@test.local`, password: 'wrong' } });
+    assert.equal(r.statusCode, i < 5 ? 401 : 429);
+  }
+  // Límite por IP: 10 por minuto aunque se roten cuentas y se falsee el inicio de
+  // X-Forwarded-For (solo cuenta la entrada que agrega el proxy, a la derecha).
   for (let i = 0; i < 11; i++) {
-    const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: '127.0.0.9', payload: { email: 'nobody@test.local', password: 'wrong' } });
+    const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: '127.0.0.9',
+      headers: { 'x-forwarded-for': `6.6.6.${i}, 203.0.113.7` }, payload: { email: `nobody-${run}-${i}@test.local`, password: 'wrong' } });
     assert.equal(r.statusCode, i < 10 ? 401 : 429);
   }
   console.log(`SECURITY OK: ${assertions} checks plus rate limiting, totals, audit and concurrent refunds.`);

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
 import type { User, AuthState, Branch, CashRegister, CashSession } from '@/types';
 import { apiClient } from '@/api';
 
@@ -7,7 +8,8 @@ interface AppContextType {
   auth: AuthState;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+
   // Location
   branches: Branch[];
   selectedBranch: Branch | null;
@@ -26,6 +28,17 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | null>(null);
+
+// Preferencias por navegador (sucursal y caja usadas por última vez). Solo IDs, sin
+// datos sensibles; si el almacenamiento falla (modo privado), simplemente no se recuerda.
+const BRANCH_PREF = 'pos_branch_id';
+const REGISTER_PREF = 'pos_register_id';
+function readPref(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* sin almacenamiento */ }
+}
 
 /**
  * Decodifica (sin verificar firma) el payload de un JWT para rehidratar la
@@ -47,12 +60,35 @@ function decodeJwtPayload(token: string): { sub: string; email: string; name: st
   }
 }
 
+function readStoredAuth(): AuthState {
+  const empty: AuthState = { user: null, token: null, isAuthenticated: false };
+  let token: string | null = null;
+  try { token = localStorage.getItem('auth_token'); } catch { return empty; }
+  if (!token) return empty;
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    try { localStorage.removeItem('auth_token'); } catch { /* sin almacenamiento */ }
+    return empty;
+  }
+  return {
+    token,
+    isAuthenticated: true,
+    user: {
+      id: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      rut: payload.rut,
+      role: payload.role as User['role'],
+      branchIds: payload.branchIds,
+      isActive: true,
+    },
+  };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({
-    user: null,
-    token: null,
-    isAuthenticated: false,
-  });
+  // La sesión se lee antes del primer render: si se hiciera en un efecto, al recargar
+  // la app se vería un instante sin sesión, iría a /login y perdería la página actual.
+  const [auth, setAuth] = useState<AuthState>(readStoredAuth);
   
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
@@ -61,48 +97,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Rehidratar sesión al montar (ej. tras recargar la página). Sin esto,
-  // un token válido en localStorage quedaba "huérfano": las requests
-  // seguían autenticadas correctamente, pero la UI mostraba al usuario
-  // como no-logueado hasta el próximo login manual.
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
-    const payload = decodeJwtPayload(token);
-    if (!payload) {
-      localStorage.removeItem('auth_token');
-      return;
-    }
-    setAuth({
-      token,
-      isAuthenticated: true,
-      user: {
-        id: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        rut: payload.rut,
-        role: payload.role as User['role'],
-        branchIds: payload.branchIds,
-        isActive: true,
-      },
-    });
-  }, []);
 
-  // Load branches on auth
+  // Load branches on auth; restaura la última sucursal usada en este navegador
+  // (si el usuario aún tiene acceso), para que recargar no pida elegirla de nuevo.
   useEffect(() => {
     if (auth.isAuthenticated) {
-      apiClient.getBranches().then(setBranches);
+      apiClient.getBranches().then((list) => {
+        setBranches(list);
+        const saved = readPref(BRANCH_PREF);
+        const restored = list.find((b) => b.id === saved);
+        if (restored) setSelectedBranch((current) => current ?? restored);
+      });
     }
   }, [auth.isAuthenticated]);
 
-  // Load cash registers when branch changes
+  // Load cash registers when branch changes; restaura la última caja de esa sucursal.
   useEffect(() => {
     if (selectedBranch) {
-      apiClient.getCashRegisters(selectedBranch.id).then(setCashRegisters);
+      writePref(BRANCH_PREF, selectedBranch.id);
       setSelectedCashRegister(null);
       setCurrentSession(null);
+      apiClient.getCashRegisters(selectedBranch.id).then((list) => {
+        setCashRegisters(list);
+        const restored = list.find((r) => r.id === readPref(REGISTER_PREF));
+        if (restored) setSelectedCashRegister(restored);
+      });
     }
   }, [selectedBranch]);
+
+  useEffect(() => {
+    if (selectedCashRegister) writePref(REGISTER_PREF, selectedCashRegister.id);
+  }, [selectedCashRegister]);
 
   // Check for existing session when register changes
   useEffect(() => {
@@ -126,12 +151,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const clearSession = useCallback(() => {
     setAuth({ user: null, token: null, isAuthenticated: false });
     setSelectedBranch(null);
     setSelectedCashRegister(null);
     setCurrentSession(null);
     localStorage.removeItem('auth_token');
+  }, []);
+
+  // Cerrar sesión también revoca el token en el servidor; si la red falla, igual
+  // se limpia localmente.
+  const logout = useCallback(() => {
+    apiClient.logout().catch(() => undefined).finally(clearSession);
+  }, [clearSession]);
+
+  useEffect(() => {
+    const onExpired = () => {
+      clearSession();
+      toast.error('Tu sesión expiró. Ingresa de nuevo.');
+    };
+    window.addEventListener('auth:expired', onExpired);
+    return () => window.removeEventListener('auth:expired', onExpired);
+  }, [clearSession]);
+
+  // El servidor invalida los tokens anteriores al cambiar la contraseña y entrega
+  // uno nuevo; se guarda para que esta pestaña siga conectada.
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const { token } = await apiClient.changePassword(currentPassword, newPassword);
+    localStorage.setItem('auth_token', token);
+    setAuth((prev) => ({ ...prev, token }));
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -146,6 +194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       auth,
       login,
       logout,
+      changePassword,
       branches,
       selectedBranch,
       setSelectedBranch,

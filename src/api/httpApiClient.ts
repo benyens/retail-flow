@@ -17,6 +17,15 @@ class HttpError extends Error {
   constructor(message: string, public status: number, public payload?: unknown) { super(message); }
 }
 
+/** Primer mensaje legible de un error de validación (zod `flatten()`), para no mostrar "Error 422". */
+function validationMessage(data: unknown): string | undefined {
+  const issues = (data as { issues?: { formErrors?: string[]; fieldErrors?: Record<string, string[] | undefined> } } | undefined)?.issues;
+  if (!issues) return undefined;
+  if (issues.formErrors?.[0]) return issues.formErrors[0];
+  const [field, errors] = Object.entries(issues.fieldErrors ?? {}).find(([, v]) => v && v.length > 0) ?? [];
+  return field && errors ? `Revisa el campo «${field}»: ${errors[0]}` : "Revisa los datos ingresados";
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY);
   const headers: Record<string, string> = {
@@ -33,10 +42,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   } catch {
     throw new HttpError("No se pudo conectar con el servidor. Si es la primera vez en un rato, está despertando (hasta ~1 min): reintenta. Si persiste, revisa CORS_ORIGINS en Render.", 0);
   }
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
+  // Sesión vencida, revocada o invalidada por cambio de contraseña: avisar a la app
+  // para que vuelva al login en vez de quedar con una UI "logueada" que no funciona.
+  // El login fallido también es 401, pero ahí no hay sesión que cerrar.
+  if (res.status === 401 && token && !path.startsWith("/auth/login") && !path.startsWith("/auth/logout")) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent("auth:expired"));
+  }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => undefined);
-  if (!res.ok) throw new HttpError(data?.message ?? `Error ${res.status}`, res.status, data);
+  if (!res.ok) throw new HttpError(data?.message ?? validationMessage(data) ?? `Error ${res.status}`, res.status, data);
   return data as T;
 }
 
@@ -59,6 +74,9 @@ export class HttpApiClient implements ApiClient {
   }
   async login(credentials: LoginCredentials): Promise<LoginResponse> { return post<LoginResponse>("/auth/login", credentials); }
   async logout(): Promise<void> { await post<void>("/auth/logout"); }
+  changePassword(currentPassword: string, newPassword: string): Promise<{ token: string }> {
+    return post<{ token: string }>("/auth/change-password", { currentPassword, newPassword });
+  }
 
   getBranches(): Promise<Branch[]> { return get<Branch[]>("/branches"); }
   getCashRegisters(branchId: string): Promise<CashRegister[]> { return get<CashRegister[]>(`/cash-registers${qs({ branchId })}`); }
@@ -154,6 +172,7 @@ export class HttpApiClient implements ApiClient {
   getUsers(): Promise<User[]> { return get<User[]>("/users"); }
   createUser(user: Omit<User, "id"> & { password: string }): Promise<User> { return post<User>("/users", user); }
   updateUser(id: string, user: Partial<User>): Promise<User> { return patch<User>(`/users/${id}`, user); }
+  async resetUserPassword(userId: string, newPassword: string): Promise<void> { await post<void>(`/users/${userId}/password`, { newPassword }); }
 
   getDailySalesReport(branchId: string, date: string): Promise<DailySalesReport> { return get<DailySalesReport>(`/reports/daily-sales${qs({ branchId, date })}`); }
 

@@ -1,4 +1,5 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useApp } from '@/state/AppContext';
 import { cn } from '@/lib/utils';
 import {
@@ -19,7 +20,9 @@ import {
   Store,
   ChevronDown,
   DollarSign,
+  KeyRound,
 } from 'lucide-react';
+import ChangePasswordDialog from './ChangePasswordDialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -48,23 +51,28 @@ const adminLinks = [
   { to: '/admin/users', icon: Settings, label: 'Usuarios' },
 ];
 
-export default function Sidebar() {
-  const location = useLocation();
+/**
+ * Navegación principal. En escritorio va fija a la izquierda; en celular se
+ * muestra dentro de un panel deslizable (ver MainLayout) y `onNavigate` lo cierra
+ * al elegir una opción.
+ */
+export default function Sidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const { auth, logout, selectedBranch, branches, setSelectedBranch, currentSession } = useApp();
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const isAdmin = auth.user?.role === 'ADMIN' || auth.user?.role === 'MANAGER';
 
   return (
-    <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-screen">
+    <aside className={cn('w-64 bg-sidebar text-sidebar-foreground flex flex-col h-dvh', className)}>
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-sidebar-primary rounded-lg flex items-center justify-center">
-            <Store className="w-5 h-5 text-sidebar-primary-foreground" />
+          <div className="w-10 h-10 shrink-0 bg-sidebar-primary rounded-lg flex items-center justify-center">
+            <Store className="w-5 h-5 text-sidebar-primary-foreground" aria-hidden="true" />
           </div>
-          <div>
-            <h1 className="font-semibold">Sistema POS</h1>
-            <p className="text-xs text-sidebar-foreground/60">{auth.user?.name}</p>
+          <div className="min-w-0">
+            <p className="font-semibold">Sistema POS</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate">{auth.user?.name}</p>
           </div>
         </div>
         
@@ -73,12 +81,12 @@ export default function Sidebar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="w-full justify-between text-sidebar-foreground hover:bg-sidebar-accent">
               <span className="truncate">{selectedBranch?.name || 'Seleccionar sucursal'}</span>
-              <ChevronDown className="w-4 h-4 ml-2" />
+              <ChevronDown className="w-4 h-4 ml-2" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             {branches.map(branch => (
-              <DropdownMenuItem key={branch.id} onClick={() => setSelectedBranch(branch)}>
+              <DropdownMenuItem key={branch.id} onClick={() => { setSelectedBranch(branch); onNavigate?.(); }}>
                 {branch.name}
               </DropdownMenuItem>
             ))}
@@ -93,7 +101,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-6 scrollbar-thin">
+      <nav aria-label="Principal" className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-6 scrollbar-thin">
         {/* POS Section */}
         <div>
           <p className="px-3 mb-2 text-xs font-medium text-sidebar-foreground/50 uppercase tracking-wider">
@@ -104,13 +112,14 @@ export default function Sidebar() {
               <NavLink
                 key={link.to}
                 to={link.to}
-                end={link.to === '/pos'} 
+                end={link.to === '/pos'}
+                onClick={onNavigate}
                 className={({ isActive }) => cn(
                   'sidebar-item',
                   isActive && 'sidebar-item-active'
                 )}
               >
-                <link.icon className="w-5 h-5" />
+                <link.icon className="w-5 h-5" aria-hidden="true" />
                 <span>{link.label}</span>
               </NavLink>
             ))}
@@ -128,12 +137,13 @@ export default function Sidebar() {
                 <NavLink
                   key={link.to}
                   to={link.to}
+                  onClick={onNavigate}
                   className={({ isActive }) => cn(
                     'sidebar-item',
                     isActive && 'sidebar-item-active'
                   )}
                 >
-                  <link.icon className="w-5 h-5" />
+                  <link.icon className="w-5 h-5" aria-hidden="true" />
                   <span>{link.label}</span>
                 </NavLink>
               ))}
@@ -143,16 +153,25 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-sidebar-border">
+      <div className="p-3 border-t border-sidebar-border space-y-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={() => setPasswordOpen(true)}
+        >
+          <KeyRound className="w-5 h-5 mr-3" aria-hidden="true" />
+          Cambiar contraseña
+        </Button>
         <Button
           variant="ghost"
           className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
           onClick={logout}
         >
-          <LogOut className="w-5 h-5 mr-3" />
-          Cerrar Sesión
+          <LogOut className="w-5 h-5 mr-3" aria-hidden="true" />
+          Cerrar sesión
         </Button>
       </div>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
     </aside>
   );
 }

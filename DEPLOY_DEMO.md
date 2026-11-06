@@ -23,13 +23,17 @@ Importa el repo (raíz, preset Vite, Node 22). Variables **antes** del primer de
 Copia el dominio de producción de Vercel (`https://NOMBRE.vercel.app`, no el de preview) y ponlo en `CORS_ORIGINS` en Render (sin barra final). Render redeploya solo.
 
 ## 5. Entrar
-Usa **el correo y la contraseña del seed** (no `admin@pos.cl`/`admin123`: son del modo mock y no existen en la API real). Elige Casa Matriz y Caja 1. Crea un usuario para tu papá en Usuarios.
+Usa **el correo y la contraseña del seed** (no `admin@pos.cl`/`admin123`: son del modo mock y no existen en la API real). Elige Casa Matriz y Caja 1 (el navegador las recuerda para la próxima vez). Crea un usuario para tu papá en Usuarios.
+
+Contraseñas (mínimo 10 caracteres): cada usuario la cambia en el menú → **Cambiar contraseña**; un ADMIN puede asignar una nueva a otro usuario en Usuarios → **Contraseña**. En ambos casos se cierran las demás sesiones de ese usuario.
 
 ## Si falla
 | Síntoma | Causa | Arreglo |
 |---|---|---|
-| Toast "Correo o contraseña incorrectos" (antes "Error 401") | Credenciales mock o seed que no corrió | Usa las del seed; revisa que los logs digan "Seed completado" |
-| Seed corrió con una clave equivocada | El seed no cambia usuarios existentes | Neon > SQL Editor: `DELETE FROM users WHERE email='TU_CORREO';` y redeploy con `SEED_ON_START=true` |
+| Toast "Correo o contraseña incorrectos" | Credenciales mock o seed que no corrió | Usa las del seed; revisa que los logs digan "Seed completado". El correo no distingue mayúsculas |
+| "Demasiados intentos para esta cuenta" | 5 intentos fallidos en 1 minuto | Espera un minuto |
+| "Tu sesión expiró" | Pasaron 12 h, o se cambió la contraseña en otro equipo | Vuelve a entrar; la app regresa a la página donde estabas |
+| Olvidaste la contraseña de un usuario | — | Otro ADMIN: Usuarios → Contraseña. Si no queda ningún ADMIN con acceso: Neon > SQL Editor `DELETE FROM users WHERE email='TU_CORREO';` y redeploy con `SEED_ON_START=true` (falla si el usuario ya tiene ventas; en ese caso pide ayuda) |
 | "No se pudo conectar con el servidor" | API dormida o CORS | Espera ~1 min y reintenta; luego revisa `CORS_ORIGINS` (exacto, sin barra final) |
 | "Falta VITE_API_BASE_URL" | Variable ausente en el build | Agrégala en Vercel y redeploya |
 | Logs: `Falta la variable X` / `-pooler` / `migrate deploy falló` | Env o URL de Neon mal | Mensaje indica cuál; usa conexión directa |
@@ -37,4 +41,8 @@ Usa **el correo y la contraseña del seed** (no `admin@pos.cl`/`admin123`: son d
 
 ## Notas
 - Render Free duerme tras ~15 min: el primer acceso tarda hasta ~1 min (el login hace un ping de despertar). Para una presentación, abre `/health` unos minutos antes.
+- Las migraciones nuevas (p. ej. `20261105120000_password_management`) se aplican solas al desplegar en Render (`migrate deploy` en el arranque).
+- `TRUST_PROXY_HOPS` (opcional, por defecto `1`): cuántos proxies hay delante de la API. Si en los logs todas las IPs de login aparecen iguales, el límite por IP estaría agrupando a todos; súbelo a `2`. El límite por cuenta funciona igual.
+- El CSP de `vercel.json` permite llamar solo a `*.onrender.com`. Si mueves la API a otro dominio, agrégalo en `connect-src`.
+- En celular el menú se abre con el botón ☰ arriba a la izquierda; en el POS se alterna entre **Productos** y **Carrito** con la barra inferior.
 - DTE simulado y datos ficticios: es una demo.

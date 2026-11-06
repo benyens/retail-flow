@@ -50,7 +50,7 @@ export default function PurchaseListPage() {
   const open = (invoice: PurchaseInvoice) => { setDetail(invoice); setNumber(invoice.invoiceNumber); setDate(invoice.invoiceDate.slice(0, 10)); setNotes(invoice.notes ?? ''); };
   if (!selectedBranch) return <p className="p-8">Selecciona una sucursal.</p>;
   const selectedSupplier = detail ? supplierMap.get(detail.supplierId) : null;
-  return <div className="p-6 lg:p-8 space-y-6">
+  return <div className="p-4 md:p-6 lg:p-8 space-y-6">
     <header className="flex flex-wrap justify-between gap-4"><div><h1 className="text-2xl font-bold flex gap-2 items-center"><Receipt />Facturas de compra</h1><p className="text-muted-foreground">{selectedBranch.name} · Busca, revisa y registra tus compras</p></div>
       <Button asChild><Link to="/admin/ingresar-factura"><Plus className="mr-2 h-4 w-4" />Ingresar factura <kbd className="ml-2 text-xs">Alt+N</kbd></Link></Button></header>
     <Card><CardContent className="pt-6 grid gap-4 md:grid-cols-3">

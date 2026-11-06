@@ -3,34 +3,60 @@ import { SessionService } from './session.service.js';
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { AuditService } from "../reports/audit.service.js";
+
+export const PASSWORD_MIN = 10;
+export const BCRYPT_COST = 12;
+export const passwordSchema = z.string()
+  .min(PASSWORD_MIN, `La contraseña debe tener al menos ${PASSWORD_MIN} caracteres`)
+  .max(128, "La contraseña es demasiado larga");
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(1).max(128),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordSchema,
+});
+
+// Hash fijo para comparar cuando el usuario no existe: el login tarda lo mismo
+// exista o no la cuenta, y así no se pueden enumerar correos por tiempo de respuesta.
+const DUMMY_HASH = bcrypt.hashSync("retail-flow-dummy-password", BCRYPT_COST);
+const INVALID = { error: "INVALID_CREDENTIALS", message: "Correo o contraseña incorrectos" };
+
 export async function authRoutes(fastify: FastifyInstance) {
+  // Límite por cuenta: no depende de la IP, así que rotar o falsear X-Forwarded-For
+  // no permite probar contraseñas sin límite contra un mismo usuario.
+  const perAccountLimit = fastify.createRateLimit({
+    max: 5,
+    timeWindow: "1 minute",
+    keyGenerator: (req) => `login-account:${String((req.body as { email?: unknown })?.email ?? "").trim().toLowerCase()}`,
+  });
+
   fastify.post("/api/v1/auth/login", { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });
     }
 
-    const user = await fastify.prisma.user.findUnique({
-      where: { email: parsed.data.email },
-      include: { branches: true },
+    const limit = await perAccountLimit(request);
+    if (!limit.isAllowed && limit.isExceeded) {
+      return reply.status(429).send({ error: "TOO_MANY_ATTEMPTS", message: "Demasiados intentos para esta cuenta. Espera un minuto." });
+    }
+
+    const user = await fastify.prisma.user.findFirst({
+      where: { email: { equals: parsed.data.email, mode: "insensitive" } },
+      include: { branches: { include: { branch: true } } },
     });
 
-    if (!user || !user.isActive) {
-      return reply.status(401).send({ error: "INVALID_CREDENTIALS", message: "Correo o contraseña incorrectos" });
+    const valid = await bcrypt.compare(parsed.data.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.isActive || !valid) {
+      return reply.status(401).send(INVALID);
     }
 
-    const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-    if (!valid) {
-      return reply.status(401).send({ error: "INVALID_CREDENTIALS", message: "Correo o contraseña incorrectos" });
-    }
-
-    const branchIds = user.branches.map((b) => b.branchId);
+    const branchIds = user.branches.filter((b) => b.branch.isActive).map((b) => b.branchId);
 
     const token = fastify.jwt.sign(
       { jti: randomUUID(), sub: user.id, email: user.email, name: user.name, rut: user.rut, role: user.role, branchIds },
@@ -57,5 +83,36 @@ export async function authRoutes(fastify: FastifyInstance) {
     const expiresAt = request.user.exp ? new Date(request.user.exp * 1000) : new Date('9999-12-31');
     await new SessionService(fastify.prisma).revoke(token, expiresAt);
     return {};
+  });
+
+  // Cambio de contraseña propio: exige la actual. Cierra las demás sesiones del
+  // usuario (tokensValidAfter) y devuelve un token nuevo para seguir conectado.
+  fastify.post("/api/v1/auth/change-password", {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const parsed = changePasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: "VALIDATION_ERROR", message: parsed.error.issues[0]?.message, issues: parsed.error.flatten() });
+    }
+    const user = await fastify.prisma.user.findUniqueOrThrow({ where: { id: request.user.sub } });
+    if (!await bcrypt.compare(parsed.data.currentPassword, user.passwordHash)) {
+      return reply.status(400).send({ error: "INVALID_CURRENT_PASSWORD", message: "La contraseña actual no es correcta" });
+    }
+    if (parsed.data.currentPassword === parsed.data.newPassword) {
+      return reply.status(400).send({ error: "SAME_PASSWORD", message: "La nueva contraseña debe ser distinta de la actual" });
+    }
+    // Segundo completo: el `iat` del JWT tiene resolución de segundos.
+    const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    await fastify.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, BCRYPT_COST), tokensValidAfter: now },
+      });
+      await AuditService.log(tx, { userId: user.id, action: "CHANGE_OWN_PASSWORD", entityType: "User", entityId: user.id });
+    });
+    const { sub, email, name, rut, role, branchIds } = request.user;
+    const token = fastify.jwt.sign({ jti: randomUUID(), sub, email, name, rut, role, branchIds }, { expiresIn: "12h" });
+    return { token };
   });
 }

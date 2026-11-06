@@ -3,7 +3,7 @@ import { useApp } from "@/state/AppContext";
 import { apiClient } from "@/api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/utils/format";
+import { formatCurrency, formatDateTime } from "@/utils/format";
 import { toast } from "sonner";
 
 import type { CashMovement, Employee } from "@/types";
@@ -53,7 +53,7 @@ export default function CashMovementsPage() {
 
   if (!canUsePage) {
     return (
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <h1 className="text-2xl font-bold mb-2">Movimientos de caja</h1>
         <p className="text-muted-foreground text-sm">
           Debe seleccionar una sucursal y tener una caja abierta para ver esta
@@ -138,7 +138,7 @@ export default function CashMovementsPage() {
                       return (
                         <tr key={m.id} className="border-t">
                           <td className="px-2 py-1 text-[11px]">
-                            {new Date(m.createdAt).toLocaleString()}
+                            {formatDateTime(m.createdAt)}
                           </td>
                           <td className="px-2 py-1">
                             {m.type === "IN" ? "Ingreso" : "Egreso"}

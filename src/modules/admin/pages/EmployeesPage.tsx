@@ -60,7 +60,7 @@ export default function EmployeesPage() {
   if (!selectedBranch) return <div className="p-8 text-muted-foreground">Selecciona una sucursal para ver empleados.</div>;
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Users className="h-6 w-6" />Empleados</h1>

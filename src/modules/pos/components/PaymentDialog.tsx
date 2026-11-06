@@ -215,7 +215,7 @@ export function PaymentDialog({ open, total, onCancel, onConfirm }: Props) {
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onCancel()}>
       <DialogContent
-        className="max-w-lg w-full"
+        className="max-w-lg"
         onKeyDown={handleKeyDown}
       >
         <DialogHeader>
@@ -356,14 +356,14 @@ export function PaymentDialog({ open, total, onCancel, onConfirm }: Props) {
               onClick={onCancel}
               className="flex-1"
             >
-              Cancelar (Esc)
+              Cancelar<span className="hidden md:inline">&nbsp;(Esc)</span>
             </Button>
             <Button
               type="button"
               onClick={() => handleAddAndMaybeConfirm("click")}
               className="flex-1"
             >
-              Agregar / Confirmar (Enter · F4)
+              Agregar / Confirmar<span className="hidden md:inline">&nbsp;(Enter · F4)</span>
             </Button>
           </div>
 

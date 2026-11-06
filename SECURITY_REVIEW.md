@@ -32,9 +32,20 @@ Los recursos de sucursal respetan las asignaciones también para ADMIN. Catálog
 - Navegador: navegación mediante atajos, búsqueda de facturas por RUT, detalle, ingreso mediante F4, bloqueo de atajos dentro de diálogos, precio guardado con Enter, reporte mensual y detalle de productos/pagos, auditoría del precio con valores antes/después.
 - Las pruebas conservan datos SMOKE/SECURITY; los usuarios SECURITY quedan inactivos. No ejecutar sobre producción.
 
+## Pasada 2026-11-05
+
+- **Login**: además del límite por IP (10/min), límite por cuenta (5/min) que no depende de la IP; comparación bcrypt siempre (hash ficticio si la cuenta no existe) para no revelar qué correos existen por tiempo de respuesta; correo normalizado (trim + minúsculas). La migración `20261105120000_password_management` normaliza los correos existentes.
+- **IP real detrás del proxy**: `trustProxy` confía solo en `TRUST_PROXY_HOPS` saltos (por defecto 1). Antes, con `true`, un atacante podía rotar `X-Forwarded-For` y evadir el límite por IP.
+- **Contraseñas**: cambio propio (exige la actual) y reset por ADMIN; mínimo 10 caracteres, bcrypt costo 12. Ambos fijan `tokensValidAfter` y todo JWT anterior recibe 401. Auditoría `CHANGE_OWN_PASSWORD` / `RESET_USER_PASSWORD`.
+- **Bloqueo accidental**: un ADMIN no puede quitarse el rol ni desactivarse, y no se puede dejar el sistema sin ADMIN activo (409).
+- **Errores**: el manejador global ya no devuelve mensajes internos de Prisma ni trazas; P2002/P2003/P2025 se traducen a 409/404 con mensajes neutros, y los 5xx devuelven "Error interno del servidor" (el detalle queda en los logs).
+- **Cabeceras**: la API envía `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP restrictiva, HSTS en producción y `Cache-Control: no-store` en `/api/`. Vercel sirve el frontend con CSP (`script-src 'self'`, `connect-src` limitado a `*.onrender.com`), HSTS, `frame-ancestors 'none'` y `Permissions-Policy`. `bodyLimit` de 1 MB.
+- **Frontend**: un 401 con sesión cierra la sesión local y avisa (antes la interfaz quedaba "conectada" sin funcionar); logout revoca el token aunque falle la red local; `noindex` en el HTML.
+- Evidencia: `test:smoke`, `test:security` (ahora con límite por cuenta y XFF falsificado) y `test:sessions` pasan; pruebas manuales con curl de cambio/reset de contraseña, 409 de proveedor duplicado sin fuga de Prisma y tiempos de login iguales (~320 ms) para cuentas existentes e inexistentes; Playwright en iPhone 13 y 1366×800.
+
 ## Límites y próximos trabajos
 
-1. JWT permanece en localStorage; el token expira a las 12 horas. Desde 2026-10-05, logout revoca su hash SHA-256 en PostgreSQL y cada petición comprueba esa revocación, incluso entre instancias. Cada login tiene un identificador aleatorio independiente. Falta renovación y administración de todas las sesiones de un usuario. Cambios de rol, sucursal y desactivación sí se aplican en la siguiente petición.
+1. JWT permanece en localStorage; el token expira a las 12 horas. Desde 2026-10-05, logout revoca su hash SHA-256 en PostgreSQL y cada petición comprueba esa revocación, incluso entre instancias. Cada login tiene un identificador aleatorio independiente. Falta renovación de token; cambiar o resetear la contraseña cierra todas las sesiones del usuario (`tokensValidAfter`). Cambios de rol, sucursal y desactivación sí se aplican en la siguiente petición.
 2. Auditoría no registra todavía todas las mutaciones de catálogo, proveedores, empleados o precios masivos. No hay retención inmutable ni protección frente a administradores directos de PostgreSQL.
 3. El limitador vive en memoria por proceso. Despliegues múltiples requieren almacenamiento compartido y configuración explícita del proxy. Configurar HTTPS, secretos únicos, CORS y cuentas reales antes de producción; el seed es para desarrollo.
 4. Facturas se cargan por sucursal y los reportes por período; la paginación visual no reduce ese volumen. Falta paginación del servidor y medición de índices con datos reales a escala.

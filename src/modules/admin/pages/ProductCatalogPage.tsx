@@ -646,7 +646,7 @@ export default function ProductCatalogPage() {
   // ================== Render ==================
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <Package2 className="w-5 h-5 text-primary" />
         <h1 className="text-xl font-semibold">

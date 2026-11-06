@@ -4,7 +4,7 @@ import { useApp } from "@/state/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/utils/format";
+import { formatCurrency, formatDateTime } from "@/utils/format";
 import { toast } from "sonner";
 
 import type {
@@ -262,7 +262,7 @@ export default function SalesHistoryPage({ mode = "sales" }: SalesHistoryPagePro
                   {filteredSales.map(({ doc, customer }) => (
                     <tr key={doc.id} className="border-t">
                       <td className="px-2 py-1 text-left text-[11px]">
-                        {new Date(doc.createdAt).toLocaleString()}
+                        {formatDateTime(doc.createdAt)}
                       </td>
                       <td className="px-2 py-1">{typeLabel(doc.docType)}</td>
                       <td className="px-2 py-1">{doc.folio ?? "-"}</td>

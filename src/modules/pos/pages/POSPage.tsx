@@ -107,6 +107,8 @@ export default function POSPage() {
   const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map());
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [cart, setCart] = useState<Cart>(emptyCart);
+  // En celular se muestra un panel a la vez (productos o carrito); en escritorio ambos.
+  const [mobilePanel, setMobilePanel] = useState<'products' | 'cart'>('products');
 
   // selección en la lista de productos
   const [searchSelectionIndex, setSearchSelectionIndex] =
@@ -772,11 +774,11 @@ export default function POSPage() {
 
   if (!currentSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-full flex items-center justify-center p-4">
         <Card className="w-full max-w-md animate-scale-in">
           <CardHeader className="text-center">
             <div className="mx-auto w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-warning" />
+              <AlertCircle className="w-8 h-8 text-warning" aria-hidden="true" />
             </div>
             <CardTitle>Caja Cerrada</CardTitle>
             <CardDescription>
@@ -791,6 +793,8 @@ export default function POSPage() {
               </label>
               <Input
                 type="number"
+                inputMode="numeric"
+                aria-label="Fondo inicial"
                 value={initialFund}
                 onChange={(e) => setInitialFund(e.target.value)}
                 className="h-12 text-lg font-mono"
@@ -805,7 +809,7 @@ export default function POSPage() {
               disabled={isOpening}
               className="w-full h-12 text-lg"
             >
-              {isOpening ? "Abriendo..." : "Abrir Caja"}
+              {isOpening ? "Abriendo…" : "Abrir Caja"}
             </Button>
           </CardContent>
         </Card>
@@ -814,23 +818,23 @@ export default function POSPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <header className="h-14 bg-card border-b px-4 flex items-center justify-between shrink-0">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">Punto de Venta</h1>
-            <div className="badge-success flex items-center gap-1">
-              <Clock className="w-3 h-3" />
+    <div className="h-full flex flex-col">
+      <header className="min-h-14 bg-card border-b px-3 md:px-4 py-2 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-2 md:gap-4">
+            <h1 className="text-base md:text-lg font-semibold truncate">Punto de Venta</h1>
+            <div className="badge-success flex items-center gap-1 whitespace-nowrap">
+              <Clock className="w-3 h-3" aria-hidden="true" />
               Caja Abierta
             </div>
           </div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="hidden md:block text-[10px] text-muted-foreground">
             Atajos: F1 productos · F3 clientes · F2 boleta/factura ·
             F4 pagar · F8 vaciar · Alt+N ingreso facturas
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          <div className="hidden lg:block text-sm text-muted-foreground tabular-nums">
             Fondo: {formatCurrency(currentSession.initialFund)}
           </div>
           <Button
@@ -838,32 +842,39 @@ export default function POSPage() {
             size="sm"
             onClick={() => setCashMovementOpen(true)}
           >
-            Mov. caja
+            <span className="sm:hidden">Mov.</span>
+            <span className="hidden sm:inline">Mov. caja</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setCloseDialogOpen(true)}
           >
-            Cerrar caja
+            <span className="sm:hidden">Cerrar</span>
+            <span className="hidden sm:inline">Cerrar caja</span>
           </Button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Lista de productos */}
-        <div className="flex-1 p-4 overflow-auto bg-pos-panel">
+        <div className={cn("flex-1 min-w-0 p-3 md:p-4 overflow-auto overscroll-contain bg-pos-panel", mobilePanel === "cart" && "hidden md:block")}>
           <div className="mb-2">
             <Input
               ref={searchInputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Buscar producto por SKU, nombre o código de barras... (F1)"
-              className="h-12 text-lg"
+              placeholder="Buscar producto por SKU, nombre o código de barras… (F1)"
+              aria-label="Buscar producto"
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-12 text-base md:text-lg"
             />
           </div>
-          <div className="mb-2 text-[10px] text-muted-foreground">
+          <div className="mb-2 hidden sm:block text-[10px] text-muted-foreground">
             También puedes usar: 12*desodorante, -1*shampoo, etc.
           </div>
 
@@ -878,7 +889,7 @@ export default function POSPage() {
                 <div
                   key={v.id}
                   className={cn(
-                    "flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 hover:border-primary cursor-pointer",
+                    "flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border bg-card px-3 py-2 hover:border-primary cursor-pointer",
                     idx === searchSelectionIndex &&
                       "border-primary bg-primary/5"
                   )}
@@ -899,9 +910,9 @@ export default function POSPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 ml-auto">
                     <div className="text-right">
-                      <div className="text-lg font-bold text-primary">
+                      <div className="text-lg font-bold text-primary tabular-nums">
                         {formatCurrency(p)}
                       </div>
 
@@ -938,7 +949,8 @@ export default function POSPage() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-9 w-9"
+                        className="h-10 w-10 md:h-9 md:w-9"
+                        aria-label={`Ver stock por sucursal de ${v.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setStockVariantId(v.id);
@@ -947,11 +959,11 @@ export default function POSPage() {
                           );
                         }}
                       >
-                        <Boxes className="w-4 h-4" />
+                        <Boxes className="w-4 h-4" aria-hidden="true" />
                       </Button>
 
                       <Button
-                        className="h-9"
+                        className="h-10 md:h-9"
                         onClick={(e) => {
                           e.stopPropagation();
                           addVariantToCart(v);
@@ -969,7 +981,7 @@ export default function POSPage() {
         </div>
 
         {/* Carrito */}
-        <div className="w-96 bg-card border-l flex flex-col">
+        <div className={cn("w-full md:w-96 shrink-0 bg-card md:border-l flex flex-col min-h-0 overflow-y-auto overscroll-contain md:overflow-hidden", mobilePanel === "products" && "hidden md:flex")}>
           <div className="p-4 border-b space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Carrito</h2>
@@ -1114,7 +1126,7 @@ export default function POSPage() {
             )}
           </div>
 
-          <div className="flex-1 p-4 overflow-auto">
+          <div className="md:flex-1 md:min-h-0 p-4 md:overflow-auto md:overscroll-contain">
             {cart.lines.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 Agregue productos al carrito
@@ -1182,23 +1194,25 @@ export default function POSPage() {
                           <Button
                             variant="outline"
                             size="icon"
+                            aria-label={`Quitar una unidad de ${l.variant.name}`}
                             onClick={() =>
                               changeQty(l.id, -1)
                             }
                           >
-                            <Minus className="w-4 h-4" />
+                            <Minus className="w-4 h-4" aria-hidden="true" />
                           </Button>
-                          <div className="w-8 text-center font-mono">
+                          <div className="w-8 text-center font-mono tabular-nums" aria-label="Cantidad">
                             {l.quantity}
                           </div>
                           <Button
                             variant="outline"
                             size="icon"
+                            aria-label={`Agregar una unidad de ${l.variant.name}`}
                             onClick={() =>
                               changeQty(l.id, +1)
                             }
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-4 h-4" aria-hidden="true" />
                           </Button>
                         </div>
                         <div className="font-semibold">
@@ -1212,8 +1226,9 @@ export default function POSPage() {
             )}
           </div>
 
-          {/* Totales (IVA incluido) */}
-          <div className="p-4 border-t space-y-2">
+          {/* Totales y pago: en celular quedan fijos abajo mientras se recorre el carrito. */}
+          <div className="sticky bottom-0 mt-auto bg-card md:static">
+          <div className="p-4 border-t space-y-2 tabular-nums">
             <div className="flex justify-between text-sm">
               <span>Neto</span>
               <span>{formatCurrency(cart.subtotal)}</span>
@@ -1226,7 +1241,7 @@ export default function POSPage() {
               <span>Total</span>
               <span>{formatCurrency(cart.total)}</span>
             </div>
-            <div className="text-[10px] text-muted-foreground text-right">
+            <div className="hidden md:block text-[10px] text-muted-foreground text-right">
               Alt+N: Ingresar factura (administración)
             </div>
           </div>
@@ -1238,13 +1253,34 @@ export default function POSPage() {
               disabled={cart.lines.length === 0}
             >
               Pagar
-              <span className="ml-2 text-[11px] font-mono bg-black/10 dark:bg-white/10 rounded px-1">
+              <span className="hidden md:inline ml-2 text-[11px] font-mono bg-black/10 dark:bg-white/10 rounded px-1">
                 F4
               </span>
             </Button>
           </div>
+          </div>
         </div>
       </div>
+
+      {/* Selector de panel en celular: productos o carrito, con el total siempre visible. */}
+      <nav aria-label="Vista del punto de venta" className="md:hidden shrink-0 grid grid-cols-2 border-t bg-card pb-[env(safe-area-inset-bottom)]">
+        <button
+          type="button"
+          aria-pressed={mobilePanel === "products"}
+          onClick={() => setMobilePanel("products")}
+          className={cn("h-14 text-sm font-medium touch-manipulation", mobilePanel === "products" ? "text-primary border-t-2 border-primary" : "text-muted-foreground")}
+        >
+          Productos
+        </button>
+        <button
+          type="button"
+          aria-pressed={mobilePanel === "cart"}
+          onClick={() => setMobilePanel("cart")}
+          className={cn("h-14 text-sm font-medium touch-manipulation tabular-nums", mobilePanel === "cart" ? "text-primary border-t-2 border-primary" : "text-muted-foreground")}
+        >
+          Carrito ({cart.lines.reduce((n, l) => n + l.quantity, 0)}) · {formatCurrency(cart.total)}
+        </button>
+      </nav>
 
       {/* Diálogo de pago */}
       <PaymentDialog
