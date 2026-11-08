@@ -1,3 +1,4 @@
+import { branchPriceListId } from "./price-list.js";
 import { AuditService } from "../reports/audit.service.js";
 import type { PrismaClient, Prisma } from "@prisma/client";
 
@@ -65,6 +66,8 @@ export interface QuickProductPayload {
   lastPurchaseCost?: number;
   unit?: string;
   categoryId?: string | null;
+  /** El precio se guarda en la lista de esta sucursal (por defecto, la lista NORMAL general). */
+  branchId?: string;
 }
 
 export class CatalogService {
@@ -167,10 +170,21 @@ export class CatalogService {
     await this.prisma.variantGroup.delete({ where: { id } });
   }
 
-  async listVariants(branchId?: string) {
+  /**
+   * Variantes visibles en una sucursal. Con `assortment`, solo el surtido del local:
+   * las que tienen precio en su lista o stock en él (así Tecnología no ve aseo).
+   */
+  async listVariants(branchId?: string, assortment = false) {
+    const listId = branchId && assortment ? await branchPriceListId(this.prisma, branchId) : null;
     const variants = await this.prisma.variant.findMany({
       where: branchId
-        ? { product: { OR: [{ allowedBranches: { none: {} } }, { allowedBranches: { some: { branchId } } }] } }
+        ? { AND: [
+          { product: { OR: [{ allowedBranches: { none: {} } }, { allowedBranches: { some: { branchId } } }] } },
+          ...(listId ? [{ OR: [
+            { prices: { some: { priceListId: listId } } },
+            { stocks: { some: { branchId, quantity: { not: 0 } } } },
+          ] }] : []),
+        ] }
         : undefined,
       include: { product: { include: { allowedBranches: true } }, variantGroup: true },
       orderBy: { name: "asc" },
@@ -251,10 +265,8 @@ export class CatalogService {
   }
 
   async createQuickProduct(payload: QuickProductPayload) {
-    const normalList = await this.prisma.priceList.findUnique({ where: { type: "NORMAL" } });
-    if (!normalList) {
-      throw new CatalogConflictError("No existe la lista de precios NORMAL (falta correr el seed)");
-    }
+    const normalList = { id: payload.branchId ? await branchPriceListId(this.prisma, payload.branchId)
+      : await branchPriceListId(this.prisma, "") };
 
     const sku = payload.sku?.trim() || `SKU-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
@@ -316,6 +328,17 @@ export class CatalogService {
   async listVariantPrices() {
     const prices = await this.prisma.salesVariantPrice.findMany();
     return prices.map((p) => ({ id: p.id, variantId: p.variantId, priceListId: p.priceListId, price: Number(p.price) }));
+  }
+
+  /** Quita el precio de una lista: el producto deja de verse y venderse en esos locales. */
+  async removeVariantPrice(variantId: string, priceListId: string, performedBy: string) {
+    return this.prisma.$transaction(async tx => {
+      const before = await tx.salesVariantPrice.findUnique({ where: { variantId_priceListId: { variantId, priceListId } } });
+      if (!before) return;
+      await tx.salesVariantPrice.delete({ where: { id: before.id } });
+      await AuditService.log(tx, { userId: performedBy, action: "REMOVE_PRICE", entityType: "VariantPrice", entityId: before.id,
+        beforeData: { variantId, priceListId, price: Number(before.price) }, afterData: undefined });
+    });
   }
 
   async setVariantPrice(variantId: string, priceListId: string, price: number, performedBy: string) {

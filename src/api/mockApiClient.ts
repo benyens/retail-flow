@@ -106,7 +106,7 @@ export class MockApiClient implements ApiClient {
     CASH_REGISTERS.push(register);
     return { ...branch, cashRegisters: [register] };
   }
-  async updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters> {
+  async updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean; priceListId: string | null }>): Promise<import('@/types').BranchWithRegisters> {
     await delay(150);
     const b = BRANCHES.find(b => b.id === id);
     if (!b) throw new Error('Sucursal no encontrada');
@@ -562,16 +562,20 @@ export class MockApiClient implements ApiClient {
     mockState.variantGroups.splice(index, 1);
   }
 
-  async getVariants(branchId?: string): Promise<VariantWithProduct[]> {
+  async getVariants(branchId?: string, options?: { assortment?: boolean }): Promise<VariantWithProduct[]> {
     await delay(200);
     const all = getAllVariantsWithProducts(); // tu fuente actual
-    
+
   if (!branchId) return all;
+  const branch = BRANCHES.find(b => b.id === branchId);
+  const listId = branch?.priceListId ?? PRICE_LISTS.find(l => l.type === 'NORMAL')?.id;
 
   return all.filter(v => {
     const allowed = v.product.allowedBranchIds;
-    if (!allowed || allowed.length === 0) return true;
-    return allowed.includes(branchId);
+    if (allowed && allowed.length > 0 && !allowed.includes(branchId)) return false;
+    if (!options?.assortment) return true;
+    return mockState.variantPrices.some(p => p.variantId === v.id && p.priceListId === listId) ||
+      mockState.stock.some(s => s.branchId === branchId && s.variantId === v.id && s.quantity !== 0);
   });
   }
 
@@ -647,6 +651,31 @@ export class MockApiClient implements ApiClient {
   async getVariantPrices(): Promise<VariantPrice[]> {
     await delay(200);
     return mockState.variantPrices;
+  }
+
+  async removeVariantPrice(variantId: string, priceListId: string): Promise<void> {
+    await delay(150);
+    mockState.variantPrices = mockState.variantPrices.filter(p => !(p.variantId === variantId && p.priceListId === priceListId));
+  }
+
+  async createPriceList(input: { name: string; copyFromId?: string }): Promise<import('@/types').PriceList> {
+    await delay(150);
+    const list = { id: generateId(), name: input.name, type: 'NORMAL' as const };
+    PRICE_LISTS.push(list);
+    if (input.copyFromId) {
+      for (const p of mockState.variantPrices.filter(p => p.priceListId === input.copyFromId)) {
+        mockState.variantPrices.push({ ...p, id: generateId(), priceListId: list.id });
+      }
+    }
+    return list;
+  }
+
+  async renamePriceList(id: string, name: string): Promise<import('@/types').PriceList> {
+    await delay(150);
+    const list = PRICE_LISTS.find(l => l.id === id);
+    if (!list) throw new Error('Lista no encontrada');
+    list.name = name;
+    return { ...list };
   }
 
   async setVariantPrice(variantId: string, priceListId: string, price: number): Promise<VariantPrice> {

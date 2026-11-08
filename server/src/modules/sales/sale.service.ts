@@ -1,3 +1,4 @@
+import { branchPriceListId } from "../catalog/price-list.js";
 import type { PrismaClient } from "@prisma/client";
 import { AuditService } from "../reports/audit.service.js";
 
@@ -92,6 +93,8 @@ export class SaleService {
       if (new Set(lines.map(l => l.variantId)).size !== lines.length) throw new SaleConflictError('Combina las cantidades de cada variante en una sola línea');
       const variants = await tx.variant.findMany({ where: { id: { in: lines.map(l => l.variantId) } },
         include: { product: { include: { allowedBranches: true } }, prices: { include: { priceList: true } }, variantGroup: { include: { wholesaleTiers: true } } } });
+      // Precio de la lista del local (Tecnología, Minimarket…); sin precio ahí, no se vende ahí.
+      const listId = await branchPriceListId(tx, branchId);
       for (const line of lines) {
         const variant = variants.find(v => v.id === line.variantId);
         if (!variant?.isActive || !variant.product.isActive || variant.variantGroupId !== line.variantGroupId ||
@@ -104,7 +107,9 @@ export class SaleService {
         } else {
           const qty = lines.filter(l => l.variantGroupId === variant.variantGroupId).reduce((s, l) => s + l.quantity, 0);
           const tier = variant.variantGroup.wholesaleTiers.filter(t => t.minQty <= qty).sort((a, b) => b.minQty - a.minQty)[0];
-          const price = tier?.unitPrice ?? variant.prices.find(p => p.priceList.type === 'NORMAL')?.price;
+          const listPrice = variant.prices.find(p => p.priceListId === listId)?.price;
+          if (listPrice == null) throw new SaleConflictError(`${variant.name === 'Única' ? 'El producto' : variant.name} no tiene precio en la lista de este local`);
+          const price = tier?.unitPrice ?? listPrice;
           if (price == null || Number(price) !== line.unitPrice || line.priceSource !== (tier ? 'WHOLESALE' : 'NORMAL')) {
             throw new SaleConflictError('El precio cambió o no coincide con la lista vigente. Actualiza el carrito');
           }

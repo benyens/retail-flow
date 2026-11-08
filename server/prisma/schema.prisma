@@ -23,14 +23,19 @@ model Branch {
   name      String
   address   String
   isActive  Boolean @default(true)
+  /// Lista de precios de venta del local; null = la lista por defecto. Define también
+  /// qué productos se ven en el local (los que tienen precio en esa lista).
+  priceListId String?
 
   company          Company           @relation(fields: [companyId], references: [id])
+  priceList        PriceList?        @relation(fields: [priceListId], references: [id])
   cashRegisters    CashRegister[]
   stocks           Stock[]
   users            UserBranch[]
   salesDocuments   SalesDocument[]
   purchaseInvoices PurchaseInvoice[]
 
+  @@index([priceListId])
   @@map("branches")
 }
 
@@ -145,12 +150,15 @@ enum PriceListType {
 }
 
 model PriceList {
-  id   String        @id @default(cuid())
-  name String
-  type PriceListType @unique
+  id        String        @id @default(cuid())
+  name      String
+  type      PriceListType
+  /// Lista NORMAL que usan las sucursales sin lista asignada (hay exactamente una).
+  isDefault Boolean       @default(false)
 
   variantPrices  SalesVariantPrice[]
   wholesaleTiers WholesaleTier[]
+  branches       Branch[]
 
   @@map("price_lists")
 }

@@ -49,7 +49,7 @@ export default function StockPage() {
     if (!selectedBranch) return;
     setIsLoading(true);
     try {
-      const [stocks, variants] = await Promise.all([apiClient.getStock(selectedBranch.id), apiClient.getVariants(selectedBranch.id)]);
+      const [stocks, variants] = await Promise.all([apiClient.getStock(selectedBranch.id), apiClient.getVariants(selectedBranch.id, { assortment: true })]);
       const byVariant = new Map(stocks.map((s: Stock) => [s.variantId, s]));
       const merged: StockRow[] = variants.map((v) => {
         const stock = byVariant.get(v.id);

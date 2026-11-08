@@ -36,6 +36,7 @@ const quickProductSchema = z.object({
   lastPurchaseCost: z.number().finite().optional(),
   unit: z.string().optional(),
   categoryId: z.string().nullable().optional(),
+  branchId: z.string().optional(),
 });
 const setVariantPriceSchema = z.object({ variantId: z.string().min(1), priceListId: z.string().min(1), price: z.number().finite().positive() });
 const wholesaleTierSchema = z.object({ variantGroupId: z.string().min(1), priceListId: z.string().min(1), minQty: z.number().finite().int().positive(), unitPrice: z.number().finite().positive() });
@@ -94,8 +95,8 @@ export async function catalogRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api/v1/variants", { preHandler: ro }, async (request) => {
-    const { branchId } = request.query as { branchId?: string };
-    return service.listVariants(branchId);
+    const { branchId, assortment } = request.query as { branchId?: string; assortment?: string };
+    return service.listVariants(branchId, assortment === "1" || assortment === "true");
   });
   fastify.get("/api/v1/variants/search", { preHandler: ro }, async (request, reply) => {
     const { q } = request.query as { q?: string };
@@ -119,6 +120,12 @@ export async function catalogRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api/v1/variant-prices", { preHandler: ro }, async () => service.listVariantPrices());
+  fastify.delete("/api/v1/variant-prices", { preHandler: rw }, async (request, reply) => {
+    const parsed = z.object({ variantId: z.string().min(1), priceListId: z.string().min(1) }).safeParse(request.query);
+    if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });
+    await service.removeVariantPrice(parsed.data.variantId, parsed.data.priceListId, request.user.sub);
+    return reply.status(204).send();
+  });
   fastify.put("/api/v1/variant-prices", { preHandler: rw }, async (request, reply) => {
     const parsed = setVariantPriceSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(422).send({ error: "VALIDATION_ERROR", issues: parsed.error.flatten() });

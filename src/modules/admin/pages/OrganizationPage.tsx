@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building, Building2, Monitor, Pencil, Plus } from "lucide-react";
+import { Building, Building2, Monitor, Pencil, Plus, Tags } from "lucide-react";
 import { apiClient } from "@/api";
 import { useApp } from "@/state/AppContext";
 import type { BranchWithRegisters, CashRegister } from "@/types";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type BranchForm = { id?: string; name: string; address: string; isActive: boolean };
+type BranchForm = { id?: string; name: string; address: string; isActive: boolean; priceListId: string | null };
+type ListForm = { id?: string; name: string; copyFromId: string };
 type RegisterForm = { id?: string; branchId: string; branchName: string; name: string; code: string; isActive: boolean };
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -24,6 +25,11 @@ export default function OrganizationPage() {
   const qc = useQueryClient();
   const company = useQuery({ queryKey: ["company"], queryFn: () => apiClient.getCompany() });
   const branches = useQuery({ queryKey: ["all-branches"], queryFn: () => apiClient.listAllBranches() });
+  const priceLists = useQuery({ queryKey: ["price-lists"], queryFn: () => apiClient.getPriceLists() });
+  const saleLists = (priceLists.data ?? []).filter((l) => l.type === "NORMAL");
+  const defaultList = saleLists.find((l) => l.isDefault) ?? saleLists[0];
+  const listName = (id: string | null | undefined) => (id ? saleLists.find((l) => l.id === id)?.name : undefined) ?? defaultList?.name ?? "—";
+  const [listForm, setListForm] = useState<ListForm | null>(null);
   const [companyForm, setCompanyForm] = useState({ name: "", rut: "", address: "" });
   const [savingCompany, setSavingCompany] = useState(false);
   const [branchForm, setBranchForm] = useState<BranchForm | null>(null);
@@ -60,16 +66,34 @@ export default function OrganizationPage() {
     try {
       const data = { name: branchForm.name.trim(), address: branchForm.address.trim() };
       if (branchForm.id) {
-        await apiClient.updateBranch(branchForm.id, { ...data, isActive: branchForm.isActive });
+        await apiClient.updateBranch(branchForm.id, { ...data, isActive: branchForm.isActive, priceListId: branchForm.priceListId });
         toast.success("Sucursal actualizada");
       } else {
-        await apiClient.createBranch(data);
+        const created = await apiClient.createBranch(data);
+        if (branchForm.priceListId) await apiClient.updateBranch(created.id, { priceListId: branchForm.priceListId });
         toast.success(`Sucursal "${data.name}" creada con su Caja 1. Asigna encargados y cajeros en Usuarios.`);
       }
       setBranchForm(null);
       await refresh();
     } catch (err) {
       toast.error(errorMessage(err, "No se pudo guardar la sucursal"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveList(e: React.FormEvent) {
+    e.preventDefault();
+    if (!listForm) return;
+    setSaving(true);
+    try {
+      if (listForm.id) await apiClient.renamePriceList(listForm.id, listForm.name.trim());
+      else await apiClient.createPriceList({ name: listForm.name.trim(), copyFromId: listForm.copyFromId || undefined });
+      toast.success(listForm.id ? "Lista renombrada" : `Lista "${listForm.name.trim()}" creada. Asígnala a un local y ajusta sus precios en Precios.`);
+      setListForm(null);
+      await qc.invalidateQueries({ queryKey: ["price-lists"] });
+    } catch (err) {
+      toast.error(errorMessage(err, "No se pudo guardar la lista"));
     } finally {
       setSaving(false);
     }
@@ -134,9 +158,35 @@ export default function OrganizationPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2"><Tags className="h-4 w-4" aria-hidden="true" />Listas de precios</CardTitle>
+            <CardDescription className="mt-1">Cada local vende con una lista. Un producto aparece en un local solo si tiene precio en su lista; los precios se editan en Precios.</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setListForm({ name: "", copyFromId: "" })}><Plus className="h-4 w-4 mr-1" aria-hidden="true" />Nueva lista</Button>
+        </CardHeader>
+        <CardContent>
+          <ul className="divide-y rounded-md border">
+            {saleLists.map((l) => {
+              const used = (branches.data ?? []).filter((b) => (b.priceListId ?? defaultList?.id) === l.id && b.isActive).map((b) => b.name);
+              return (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium flex items-center gap-2">{l.name}{l.id === defaultList?.id && <Badge variant="secondary">Predeterminada</Badge>}</p>
+                    <p className="text-xs text-muted-foreground">{used.length ? `Locales: ${used.join(", ")}` : "Ningún local la usa"}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setListForm({ id: l.id, name: l.name, copyFromId: "" })} aria-label={`Renombrar ${l.name}`}>Renombrar</Button>
+                </li>
+              );
+            })}
+          </ul>
+        </CardContent>
+      </Card>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold flex items-center gap-2"><Building2 className="h-5 w-5" aria-hidden="true" />Sucursales</h2>
-        <Button onClick={() => setBranchForm({ name: "", address: "", isActive: true })}><Plus className="h-4 w-4 mr-1" aria-hidden="true" />Nueva sucursal</Button>
+        <Button onClick={() => setBranchForm({ name: "", address: "", isActive: true, priceListId: null })}><Plus className="h-4 w-4 mr-1" aria-hidden="true" />Nueva sucursal</Button>
       </div>
 
       {branches.isPending && <p role="status" className="text-sm text-muted-foreground">Cargando…</p>}
@@ -149,8 +199,9 @@ export default function OrganizationPage() {
                 <div className="min-w-0">
                   <p className="font-semibold flex items-center gap-2">{b.name}{!b.isActive && <Badge variant="secondary">Inactiva</Badge>}</p>
                   <p className="text-sm text-muted-foreground break-words">{b.address}</p>
+                  <p className="text-sm mt-0.5"><span className="text-muted-foreground">Lista de precios:</span> {listName(b.priceListId)}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setBranchForm({ id: b.id, name: b.name, address: b.address, isActive: b.isActive })}>
+                <Button variant="outline" size="sm" onClick={() => setBranchForm({ id: b.id, name: b.name, address: b.address, isActive: b.isActive, priceListId: b.priceListId ?? null })}>
                   <Pencil className="h-4 w-4 mr-1" aria-hidden="true" />Editar
                 </Button>
               </div>
@@ -190,6 +241,15 @@ export default function OrganizationPage() {
                 <Label htmlFor="br-address">Dirección</Label>
                 <Input id="br-address" required maxLength={200} autoComplete="street-address" value={branchForm.address} onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })} />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="br-list">Lista de precios</Label>
+                <select id="br-list" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={branchForm.priceListId ?? ""} onChange={(e) => setBranchForm({ ...branchForm, priceListId: e.target.value || null })}>
+                  <option value="">Predeterminada ({defaultList?.name ?? "—"})</option>
+                  {saleLists.filter((l) => l.id !== defaultList?.id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+                <p className="text-xs text-muted-foreground">Define qué productos se ven y a qué precio se venden en este local.</p>
+              </div>
               {branchForm.id && (
                 <div className="flex items-center gap-2">
                   <Switch id="br-active" checked={branchForm.isActive} onCheckedChange={(v) => setBranchForm({ ...branchForm, isActive: v })} />
@@ -198,6 +258,37 @@ export default function OrganizationPage() {
               )}
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button type="button" variant="outline" onClick={() => setBranchForm(null)} disabled={saving}>Cancelar</Button>
+                <Button type="submit" disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!listForm} onOpenChange={(o) => !o && setListForm(null)}>
+        <DialogContent className="sm:max-w-md">
+          {listForm && (
+            <form onSubmit={saveList} className="space-y-4">
+              <DialogHeader>
+                <DialogTitle>{listForm.id ? "Renombrar lista" : "Nueva lista de precios"}</DialogTitle>
+                <DialogDescription>{listForm.id ? "El nombre solo se usa para identificarla." : "Por ejemplo \"Tecnología\" o \"Minimarket\"."}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-1">
+                <Label htmlFor="pl-name">Nombre</Label>
+                <Input id="pl-name" required maxLength={60} value={listForm.name} onChange={(e) => setListForm({ ...listForm, name: e.target.value })} />
+              </div>
+              {!listForm.id && (
+                <div className="space-y-1">
+                  <Label htmlFor="pl-copy">Precios iniciales</Label>
+                  <select id="pl-copy" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={listForm.copyFromId} onChange={(e) => setListForm({ ...listForm, copyFromId: e.target.value })}>
+                    <option value="">Vacía (agregar productos de a uno en Precios)</option>
+                    {saleLists.map((l) => <option key={l.id} value={l.id}>Copiar todos los precios de "{l.name}"</option>)}
+                  </select>
+                </div>
+              )}
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setListForm(null)} disabled={saving}>Cancelar</Button>
                 <Button type="submit" disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
               </DialogFooter>
             </form>

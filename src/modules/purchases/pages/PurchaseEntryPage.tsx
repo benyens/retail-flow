@@ -607,6 +607,7 @@ export default function PurchaseEntryPage() {
         salePrice: sp,
         lastPurchaseCost: newProdLastCost ? Number(newProdLastCost) : undefined,
         unit: "UN",
+        branchId: selectedBranch?.id, // el precio queda en la lista de este local
       });
 
       // ✅ Refetch catálogo para que quede consistente en toda la app

@@ -11,10 +11,12 @@ import { AuditService } from "../modules/reports/audit.service.js";
  * - Al responder con éxito se registra la acción con el estado posterior.
  * Un fallo al auditar se registra en el log y no rompe la operación ya hecha.
  */
-type Model = "company" | "branch" | "cashRegister" | "product" | "variantGroup" | "variant" | "wholesaleTier" | "productCategory" | "supplier" | "employee" | "customer";
+type Model = "priceList" | "company" | "branch" | "cashRegister" | "product" | "variantGroup" | "variant" | "wholesaleTier" | "productCategory" | "supplier" | "employee" | "customer";
 type Rule = { action: string; entityType: string; model: Model };
 
 const RULES: Record<string, Rule> = {
+  "POST /api/v1/price-lists": { action: "CREATE_PRICE_LIST", entityType: "PriceList", model: "priceList" },
+  "PATCH /api/v1/price-lists/:id": { action: "UPDATE_PRICE_LIST", entityType: "PriceList", model: "priceList" },
   "PATCH /api/v1/company": { action: "UPDATE_COMPANY", entityType: "Company", model: "company" },
   "POST /api/v1/organization/branches": { action: "CREATE_BRANCH", entityType: "Branch", model: "branch" },
   "PATCH /api/v1/organization/branches/:id": { action: "UPDATE_BRANCH", entityType: "Branch", model: "branch" },

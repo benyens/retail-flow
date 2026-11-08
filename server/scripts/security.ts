@@ -127,6 +127,31 @@ try {
   assert.deepEqual(orgAudit.map((l: { action: string }) => l.action), ['CREATE_CASH_REGISTER']);
   assertions += 16;
 
+  // Lista de precios por local: la sucursal NEW usa "Minimarket" (vacía); el producto del
+  // run no se ve ni se vende ahí hasta tener precio en esa lista, y se cobra ese precio.
+  await req(manager.token, 'POST', '/price-lists', { name: 'x' }, 403);
+  const mini = await req(admin.token, 'POST', '/price-lists', { name: `${run}-MINI` }, 201);
+  await req(admin.token, 'PATCH', `/organization/branches/${nb.id}`, { isActive: true, priceListId: mini.id });
+  const wholesaleList = (await req(admin.token, 'GET', '/price-lists')).find((p: { type: string }) => p.type === 'MAYORISTA');
+  await req(admin.token, 'PATCH', `/organization/branches/${nb.id}`, { priceListId: wholesaleList.id }, 409);
+  const seen = (q: string) => req(admin.token, 'GET', `/variants?branchId=${nb.id}${q}`).then((vs: { id: string }[]) => vs.some(v => v.id === variant.id));
+  assert.equal(await seen('&assortment=1'), false); assert.equal(await seen(''), true);
+  const nbReg = nb.cashRegisters[0];
+  const nbSes = await req(admin.token, 'POST', '/cash-sessions', { cashRegisterId: nbReg.id, initialFund: 0 }, 201);
+  const nbSale = { ...payload, branchId: nb.id, sessionId: nbSes.id };
+  const noPrice = await app.inject({ method: 'POST', url: '/api/v1/sales', headers: { authorization: `Bearer ${admin.token}` }, payload: nbSale });
+  assert.equal(noPrice.statusCode, 409); assert.match(noPrice.json().message, /lista de este local/);
+  await req(admin.token, 'PUT', '/variant-prices', { variantId: variant.id, priceListId: mini.id, price: 990 });
+  assert.equal(await seen('&assortment=1'), true);
+  await req(admin.token, 'POST', '/stock/adjustments', { branchId: nb.id, variantId: variant.id, quantity: 2, notes: run }, 201);
+  await req(admin.token, 'POST', '/sales', nbSale, 409); // 1190 ya no es el precio en este local
+  await req(admin.token, 'POST', '/sales', { ...nbSale, lines: [{ ...payload.lines[0], unitPrice: 990, subtotal: 1980 }], payments: [{ method: 'CASH', amount: 1980 }] }, 201);
+  await app.inject({ method: 'DELETE', url: `/api/v1/variant-prices?variantId=${variant.id}&priceListId=${mini.id}`, headers: { authorization: `Bearer ${admin.token}` } });
+  assert.equal(await seen('&assortment=1'), false);
+  await req(admin.token, 'POST', `/cash-sessions/${nbSes.id}/close`, { declaredCash: 1980 });
+  await req(admin.token, 'PATCH', `/organization/branches/${nb.id}`, { isActive: false });
+  assertions += 12;
+
   // Límite por cuenta: 5 intentos por minuto aunque cambie la IP.
   for (let i = 0; i < 6; i++) {
     const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: `127.0.1.${i}`, payload: { email: `nobody-${run}@test.local`, password: 'wrong' } });

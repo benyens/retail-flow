@@ -1,4 +1,5 @@
 // src/modules/pos/pages/POSPage.tsx
+import { branchPriceListId } from "@/utils/prices";
 import {
   useEffect,
   useMemo,
@@ -93,7 +94,7 @@ type BranchStockRow = {
 type QuickCommand = { qty: number; text: string } | null;
 
 export default function POSPage() {
-  const { currentSession, selectedCashRegister, setCurrentSession, setSelectedCashRegister, auth } = useApp();
+  const { currentSession, selectedCashRegister, setCurrentSession, setSelectedCashRegister, auth, branches } = useApp();
   const foreignSession = !!currentSession && currentSession.userId !== auth.user?.id;
   const openSessions = useQuery({
     queryKey: ["open-sessions", selectedCashRegister?.branchId],
@@ -189,7 +190,7 @@ export default function POSPage() {
     (async () => {
       try {
         const [v, t, vp, st, cs, emps, lists] = await Promise.all([
-          apiClient.getVariants(selectedCashRegister.branchId),
+          apiClient.getVariants(selectedCashRegister.branchId, { assortment: true }),
           apiClient.getWholesaleTiers(),
           apiClient.getVariantPrices(),
           apiClient.getStock(selectedCashRegister.branchId),
@@ -198,16 +199,18 @@ export default function POSPage() {
           apiClient.getPriceLists(),
         ]);
 
-        setVariants(v);
         setTiers(t);
 
-        // precios normales (lista pl-1)
-        const normalPriceListId = lists.find(l => l.type === "NORMAL")?.id;
+        // Precios de la lista de este local (Tecnología, Minimarket…). Solo se venden
+        // productos con precio en esa lista; el servidor valida lo mismo.
+        const normalPriceListId = branchPriceListId(branches.find(b => b.id === selectedCashRegister.branchId), lists);
         const pMap = new Map<string, number>();
         (vp as VariantPrice[])
           .filter((x) => x.priceListId === normalPriceListId)
           .forEach((x) => pMap.set(x.variantId, x.price));
         setPriceMap(pMap);
+        // En el POS solo lo que se puede vender aquí (con precio en la lista del local).
+        setVariants(v.filter((x) => pMap.has(x.id)));
 
         // stock en sucursal actual
         const sMap = new Map<string, number>();

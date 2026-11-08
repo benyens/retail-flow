@@ -114,7 +114,7 @@ export class HttpApiClient implements ApiClient {
   updateCompany(p: Partial<Omit<import('@/types').Company, 'id'>>): Promise<import('@/types').Company> { return patch("/company", p); }
   listAllBranches(): Promise<import('@/types').BranchWithRegisters[]> { return get("/organization/branches"); }
   createBranch(input: { name: string; address: string }): Promise<import('@/types').BranchWithRegisters> { return post("/organization/branches", input); }
-  updateBranch(id: string, p: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters> { return patch(`/organization/branches/${id}`, p); }
+  updateBranch(id: string, p: Partial<{ name: string; address: string; isActive: boolean; priceListId: string | null }>): Promise<import('@/types').BranchWithRegisters> { return patch(`/organization/branches/${id}`, p); }
   createCashRegister(branchId: string, input: { name: string; code: string }): Promise<CashRegister> { return post(`/organization/branches/${branchId}/registers`, input); }
   updateCashRegister(id: string, p: Partial<{ name: string; code: string; isActive: boolean }>): Promise<CashRegister> { return patch(`/organization/registers/${id}`, p); }
 
@@ -140,7 +140,7 @@ export class HttpApiClient implements ApiClient {
   updateVariantGroup(id: string, group: Partial<VariantGroup>): Promise<VariantGroup> { return patch<VariantGroup>(`/variant-groups/${id}`, group); }
   deleteVariantGroup(id: string): Promise<void> { return del<void>(`/variant-groups/${id}`); }
 
-  getVariants(branchId?: string): Promise<VariantWithProduct[]> { return get<VariantWithProduct[]>(`/variants${qs({ branchId })}`); }
+  getVariants(branchId?: string, options?: { assortment?: boolean }): Promise<VariantWithProduct[]> { return get<VariantWithProduct[]>(`/variants${qs({ branchId, assortment: options?.assortment ? "1" : undefined })}`); }
   createVariant(variant: Omit<Variant, "id">): Promise<Variant> { return post<Variant>("/variants", variant); }
   updateVariant(id: string, variant: Partial<Variant>): Promise<Variant> { return patch<Variant>(`/variants/${id}`, variant); }
   deleteVariant(id: string): Promise<void> { return del<void>(`/variants/${id}`); }
@@ -152,6 +152,9 @@ export class HttpApiClient implements ApiClient {
   deleteProductCategory(id: string): Promise<void> { return del<void>(`/product-categories/${id}`); }
 
   getVariantPrices(): Promise<VariantPrice[]> { return get<VariantPrice[]>("/variant-prices"); }
+  removeVariantPrice(variantId: string, priceListId: string): Promise<void> { return del<void>(`/variant-prices${qs({ variantId, priceListId })}`); }
+  createPriceList(input: { name: string; copyFromId?: string }): Promise<import('@/types').PriceList> { return post("/price-lists", input); }
+  renamePriceList(id: string, name: string): Promise<import('@/types').PriceList> { return patch(`/price-lists/${id}`, { name }); }
   setVariantPrice(variantId: string, priceListId: string, price: number): Promise<VariantPrice> { return put<VariantPrice>("/variant-prices", { variantId, priceListId, price }); }
 
   getWholesaleTiers(): Promise<WholesaleTier[]> { return get<WholesaleTier[]>("/wholesale-tiers"); }

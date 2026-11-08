@@ -41,7 +41,30 @@ export class OrganizationService {
     });
   }
 
-  async updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean }>) {
+  /**
+   * Nueva lista de venta (p. ej. "Minimarket"). `copyFromId` copia todos los precios
+   * de otra lista como punto de partida; sin él parte vacía y no muestra productos.
+   */
+  async createPriceList(input: { name: string; copyFromId?: string }) {
+    return this.prisma.$transaction(async (tx) => {
+      const list = await tx.priceList.create({ data: { name: input.name, type: "NORMAL" } });
+      if (input.copyFromId) {
+        const prices = await tx.salesVariantPrice.findMany({ where: { priceListId: input.copyFromId } });
+        await tx.salesVariantPrice.createMany({ data: prices.map((p) => ({ variantId: p.variantId, priceListId: list.id, price: p.price })) });
+      }
+      return list;
+    });
+  }
+
+  async renamePriceList(id: string, name: string) {
+    return this.prisma.priceList.update({ where: { id }, data: { name } });
+  }
+
+  async updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean; priceListId: string | null }>) {
+    if (patch.priceListId) {
+      const list = await this.prisma.priceList.findUnique({ where: { id: patch.priceListId } });
+      if (list?.type !== "NORMAL") throw new OrganizationConflictError("La sucursal debe usar una lista de precios de venta (no mayorista).");
+    }
     if (patch.isActive === false) {
       const open = await this.prisma.cashSession.count({ where: { status: "OPEN", cashRegister: { branchId: id } } });
       if (open) throw new OrganizationConflictError("La sucursal tiene cajas abiertas. Ciérralas antes de desactivarla.");

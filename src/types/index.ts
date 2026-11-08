@@ -13,6 +13,8 @@ export interface Branch {
   name: string;
   address: string;
   isActive: boolean;
+  /** Lista de precios de venta del local; null = la lista por defecto. */
+  priceListId?: string | null;
 }
 
 export interface Company {
@@ -250,6 +252,8 @@ export interface AuditFilters {
 
 export type QuickProductPayload = {
   mode: QuickProductMode;
+  /** El precio se guarda en la lista de este local. */
+  branchId?: string;
 
   // NEW_PRODUCT
   productName?: string;         // requerido si mode=NEW_PRODUCT
@@ -278,6 +282,8 @@ export interface PriceList {
   id: string;
   name: string;
   type: PriceListType;
+  /** La lista NORMAL que usan las sucursales sin lista asignada. */
+  isDefault?: boolean;
 }
 
 export interface VariantPrice {

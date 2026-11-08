@@ -29,8 +29,13 @@ async function main() {
     create: { branchId: branch.id, name: "Caja 1", code: "CAJA-1" },
   });
 
-  await prisma.priceList.upsert({ where: { type: "NORMAL" }, update: {}, create: { type: "NORMAL", name: "Precio Normal" } });
-  await prisma.priceList.upsert({ where: { type: "MAYORISTA" }, update: {}, create: { type: "MAYORISTA", name: "Precio Mayorista" } });
+  // `type` ya no es único (puede haber varias listas NORMAL, una por tipo de local).
+  if (!await prisma.priceList.findFirst({ where: { type: "NORMAL", isDefault: true } })) {
+    await prisma.priceList.create({ data: { type: "NORMAL", name: "Precio Normal", isDefault: true } });
+  }
+  if (!await prisma.priceList.findFirst({ where: { type: "MAYORISTA" } })) {
+    await prisma.priceList.create({ data: { type: "MAYORISTA", name: "Precio Mayorista" } });
+  }
 
   await prisma.productCategory.upsert({ where: { name: "General" }, update: {}, create: { name: "General" } });
 

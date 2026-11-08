@@ -1,3 +1,4 @@
+import { branchPriceListId } from "@/utils/prices";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 // src/modules/admin/pages/PriceManagementPage.tsx
 import { useEffect, useMemo, useState } from "react";
@@ -26,7 +27,9 @@ import { formatCurrency } from "@/utils/format";
 type BulkOperation = "SET" | "PERCENT" | "ABSOLUTE";
 
 export default function PriceManagementPage() {
-  const { selectedBranch } = useApp();
+  const { selectedBranch, branches } = useApp();
+  const [availability, setAvailability] = useState<"ALL" | "PRICED" | "UNPRICED">("ALL");
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [variants, setVariants] = useState<VariantWithProduct[]>([]);
   const [prices, setPrices] = useState<VariantPrice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +72,8 @@ export default function PriceManagementPage() {
         setVariants(vs);
         setPrices(ps);
         setPriceLists(lists);
-        setPriceListId(lists.find(l => l.type === "NORMAL")?.id ?? "");
+        // Parte en la lista del local actual (Tecnología, Minimarket…).
+        setPriceListId(branchPriceListId(selectedBranch, lists) ?? "");
       } catch (err) {
         console.error(err);
         toast.error("Error al cargar catálogo y precios");
@@ -116,6 +120,10 @@ export default function PriceManagementPage() {
   const filteredVariants = useMemo(() => {
     const q = search.toLowerCase();
     return variants.filter((v) => {
+      if (availability !== "ALL") {
+        const priced = prices.some((p) => p.variantId === v.id && p.priceListId === priceListId);
+        if (availability === "PRICED" ? !priced : priced) return false;
+      }
       if (
         categoryFilter !== "ALL" &&
         v.product.category !== categoryFilter
@@ -134,7 +142,7 @@ export default function PriceManagementPage() {
         v.barcode?.toLowerCase().includes(q)
       );
     });
-  }, [variants, search, categoryFilter, groupFilter]);
+  }, [variants, search, categoryFilter, groupFilter, availability, prices, priceListId]);
 
   const allSelectedOnPage =
     filteredVariants.length > 0 &&
@@ -159,6 +167,20 @@ export default function PriceManagementPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  // Quitar el precio saca el producto de los locales que usan esta lista.
+  const handleRemovePrice = async (variantId: string) => {
+    setRemovingId(variantId);
+    try {
+      await apiClient.removeVariantPrice(variantId, priceListId);
+      setPrices((prev) => prev.filter((p) => !(p.variantId === variantId && p.priceListId === priceListId)));
+      toast.success("Producto quitado de esta lista");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo quitar el precio");
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   const handleSaveRow = async (variantId: string) => {
@@ -285,8 +307,8 @@ export default function PriceManagementPage() {
 
           {selectedBranch && (
             <p className="text-xs text-muted-foreground">
-              Los precios son globales para la empresa, pero el stock
-              se maneja por sucursal.
+              Cada local vende con su lista de precios (se asigna en Empresa y locales);
+              el stock se maneja por sucursal.
             </p>
           )}
 
@@ -362,10 +384,27 @@ export default function PriceManagementPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {priceLists.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                  {priceLists.map(l => <SelectItem key={l.id} value={l.id}>{l.name}{l.type === "MAYORISTA" ? " (mayorista)" : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <span className="text-sm font-medium mr-2">Mostrar:</span>
+              <Select value={availability} onValueChange={(v) => setAvailability(v as typeof availability)}>
+                <SelectTrigger className="w-48" aria-label="Mostrar productos"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los productos</SelectItem>
+                  <SelectItem value="PRICED">Con precio en esta lista</SelectItem>
+                  <SelectItem value="UNPRICED">Sin precio en esta lista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {priceLists.find(l => l.id === priceListId)?.type === "NORMAL" && (
+              <p className="text-xs text-muted-foreground basis-full">
+                Usada en: {branches.filter(b => branchPriceListId(b, priceLists) === priceListId).map(b => b.name).join(", ") || "ningún local"}.
+                {" "}Un producto se vende en esos locales solo si tiene precio aquí.
+              </p>
+            )}
           </div>
 
           {/* Cambios masivos */}
@@ -539,7 +578,7 @@ export default function PriceManagementPage() {
                         <td className="px-3 py-2 align-top text-right font-mono">
                           {price
                             ? formatCurrency(price.price)
-                            : "—"}
+                            : <span className="text-xs font-sans text-muted-foreground">No se vende</span>}
                         </td>
                         <td className="px-3 py-2 align-top text-right">
                           <Input
@@ -568,16 +607,26 @@ export default function PriceManagementPage() {
                             )}
                         </td>
                         <td className="px-3 py-2 align-top text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSaveRow(v.id)}
-                            disabled={savingRowId === v.id}
-                          >
-                            {savingRowId === v.id
-                              ? "Guardando..."
-                              : "Guardar"}
-                          </Button>
+                          <div className="flex flex-col items-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSaveRow(v.id)}
+                              disabled={savingRowId === v.id}
+                            >
+                              {savingRowId === v.id
+                                ? "Guardando…"
+                                : "Guardar"}
+                            </Button>
+                            {price && (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground"
+                                disabled={removingId === v.id}
+                                onClick={() => handleRemovePrice(v.id)}
+                                aria-label={`Quitar ${v.product.name} ${v.name} de esta lista`}>
+                                Quitar de la lista
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

@@ -51,6 +51,7 @@ Cada módulo sigue el mismo patrón: `X.service.ts` (lógica de negocio + Prisma
 
 - `auth/` — login/logout/refresh/change-password. JWT de 12 h con claim `authTime`; `/auth/refresh` emite uno nuevo hasta 7 días desde el login (`MAX_SESSION_SECONDS`). El cliente renueva cuando quedan < 4 h (`utils/session.ts`, `httpApiClient.maybeRefresh`, `AppContext`). Login: límite 10/min por IP y 5/min por cuenta, correo sin distinguir mayúsculas, tiempo constante exista o no la cuenta. `users.tokensValidAfter` invalida los JWT emitidos antes de un cambio o reset de contraseña (lo revisa `plugins/auth.ts`).
 - `lookups/` — branches, cash registers, product categories (listas simples).
+- **Listas de precios por local**: `Branch.priceListId` (null = lista NORMAL `isDefault`). `branchPriceListId` (servidor `catalog/price-list.ts`, cliente `utils/prices.ts`) resuelve la lista. El POS cobra y `createSale` valida contra esa lista; sin precio ahí no se vende ahí. `GET /variants?branchId&assortment=1` = surtido del local (precio en su lista o stock ≠ 0). `PriceList.type` ya no es único: puede haber varias NORMAL; la MAYORISTA sigue siendo una.
 - `organization/` — empresa (datos del comprobante), alta/edición de sucursales y cajas, solo ADMIN. Una sucursal nueva trae `Caja 1` y se asigna a todos los ADMIN activos; no se desactiva una caja o sucursal con sesiones abiertas (409).
 - `catalog/` — products, variant groups, variants, `createQuickProduct`, precios, escalones mayoristas.
 - `stock/` — inventario, movimientos, ajustes.

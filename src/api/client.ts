@@ -57,7 +57,7 @@ export interface ApiClient {
   updateCompany(patch: Partial<Omit<import('@/types').Company, 'id'>>): Promise<import('@/types').Company>;
   listAllBranches(): Promise<import('@/types').BranchWithRegisters[]>;
   createBranch(input: { name: string; address: string }): Promise<import('@/types').BranchWithRegisters>;
-  updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean }>): Promise<import('@/types').BranchWithRegisters>;
+  updateBranch(id: string, patch: Partial<{ name: string; address: string; isActive: boolean; priceListId: string | null }>): Promise<import('@/types').BranchWithRegisters>;
   createCashRegister(branchId: string, input: { name: string; code: string }): Promise<CashRegister>;
   updateCashRegister(id: string, patch: Partial<{ name: string; code: string; isActive: boolean }>): Promise<CashRegister>;
   
@@ -92,7 +92,8 @@ export interface ApiClient {
   updateVariantGroup(id: string, group: Partial<VariantGroup>): Promise<VariantGroup>;
   deleteVariantGroup(id: string): Promise<void>;
   
-  getVariants(branchId?: string): Promise<VariantWithProduct[]>;
+  /** Con `assortment`, solo el surtido del local: con precio en su lista o con stock ahí. */
+  getVariants(branchId?: string, options?: { assortment?: boolean }): Promise<VariantWithProduct[]>;
   createVariant(variant: Omit<Variant, 'id'>): Promise<Variant>;
   updateVariant(id: string, variant: Partial<Variant>): Promise<Variant>;
   deleteVariant(id: string): Promise<void>;
@@ -109,6 +110,11 @@ export interface ApiClient {
   getPriceLists(): Promise<import('@/types').PriceList[]>;
   getVariantPrices(): Promise<VariantPrice[]>;
   setVariantPrice(variantId: string, priceListId: string, price: number): Promise<VariantPrice>;
+  /** Quita el precio: el producto deja de verse y venderse en los locales con esa lista. */
+  removeVariantPrice(variantId: string, priceListId: string): Promise<void>;
+  /** Nueva lista de venta (solo ADMIN); `copyFromId` copia los precios de otra lista. */
+  createPriceList(input: { name: string; copyFromId?: string }): Promise<import('@/types').PriceList>;
+  renamePriceList(id: string, name: string): Promise<import('@/types').PriceList>;
   
   getWholesaleTiers(): Promise<WholesaleTier[]>;
   createWholesaleTier(tier: Omit<WholesaleTier, 'id'>): Promise<WholesaleTier>;
